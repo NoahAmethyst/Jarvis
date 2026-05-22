@@ -54,16 +54,25 @@ def chat(req: ChatRequest):
 
 @app.post("/ingest")
 def ingest(req: IngestRequest):
-    know_mem.store_knowledge(req.content, req.source_url, req.user_id)
-    return {"success": True}
+    try:
+        know_mem.store_knowledge(req.content, req.source_url, req.user_id)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/memory/{uid}")
 def get_memory(uid: str):
-    return conv_mem.get_history_records(uid)
+    try:
+        return conv_mem.get_history_records(uid)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/memory/{uid}")
 def delete_memory(uid: str):
-    conv_mem.delete_history(uid)
-    return {"success": True}
+    try:
+        conv_mem.delete_history(uid)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

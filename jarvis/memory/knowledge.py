@@ -58,7 +58,7 @@ def store_knowledge(text: str, source_url: str, user_id: str):
     embeddings = _get_embeddings()
     vector = embeddings.embed_query(text)
     client = _get_client()
-    key = f"{user_id}:{source_url}:{text[:100]}"
+    key = f"{user_id}:{source_url}:{text}"
     point_id = int(hashlib.sha256(key.encode()).hexdigest(), 16) % (2**63)
     client.upsert(
         collection_name=COLLECTION_NAME,

@@ -38,7 +38,7 @@ def test_chat_missing_user_id_returns_422(client):
 
 
 def test_ingest_stores_knowledge(client):
-    with patch("jarvis.memory.knowledge.store_knowledge") as mock_store:
+    with patch("jarvis.api.http.routes.know_mem.store_knowledge") as mock_store:
         resp = client.post("/ingest", json={
             "content": "LangGraph is a graph-based framework for LLM agents.",
             "source_url": "https://docs.langchain.com/langgraph",
@@ -46,6 +46,11 @@ def test_ingest_stores_knowledge(client):
         })
     assert resp.status_code == 200
     assert resp.json()["success"] is True
+    mock_store.assert_called_once_with(
+        "LangGraph is a graph-based framework for LLM agents.",
+        "https://docs.langchain.com/langgraph",
+        "u1",
+    )
 
 
 def test_get_memory_returns_history(client):

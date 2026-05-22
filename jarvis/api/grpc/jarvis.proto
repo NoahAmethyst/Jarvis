@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package jarvis;
+
+service JarvisService {
+  rpc Chat(ChatRequest) returns (ChatResponse);
+  rpc Ingest(IngestRequest) returns (IngestResponse);
+  rpc GetMemory(MemoryRequest) returns (MemoryResponse);
+  rpc DeleteMemory(MemoryRequest) returns (DeleteResponse);
+}
+
+message ChatRequest {
+  string message = 1;
+  string user_id = 2;
+  string llm = 3;
+  string reflect_llm = 4;
+}
+
+message ChatResponse {
+  string answer = 1;
+  bool low_confidence = 2;
+}
+
+message IngestRequest {
+  string content = 1;
+  string source_url = 2;
+  string user_id = 3;
+}
+
+message IngestResponse {
+  bool success = 1;
+}
+
+message MemoryRequest {
+  string user_id = 1;
+}
+
+message MemoryResponse {
+  repeated ConversationEntry entries = 1;
+}
+
+message ConversationEntry {
+  string role = 1;
+  string content = 2;
+  string created_at = 3;
+}
+
+message DeleteResponse {
+  bool success = 1;
+}
