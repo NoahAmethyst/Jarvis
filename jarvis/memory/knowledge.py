@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from datetime import datetime, timezone
 from qdrant_client import QdrantClient
@@ -24,8 +25,15 @@ def _parse_embed_model(model_spec: str) -> tuple[str, str, str]:
 
 
 def _get_embeddings() -> OpenAIEmbeddings:
+    from jarvis.config import OPENAI_API_KEY
     provider, model_id, base_url = _parse_embed_model(EMBED_MODEL)
-    kwargs = dict(model=model_id, api_key=SILICONFLOW_API_KEY)
+    if provider == "siliconflow":
+        api_key = SILICONFLOW_API_KEY
+    elif provider == "openai":
+        api_key = OPENAI_API_KEY
+    else:
+        api_key = SILICONFLOW_API_KEY  # fallback to siliconflow for unknown providers
+    kwargs: dict = dict(model=model_id, api_key=api_key)
     if base_url:
         kwargs["base_url"] = base_url
     return OpenAIEmbeddings(**kwargs)
@@ -50,7 +58,8 @@ def store_knowledge(text: str, source_url: str, user_id: str):
     embeddings = _get_embeddings()
     vector = embeddings.embed_query(text)
     client = _get_client()
-    point_id = abs(hash(f"{user_id}:{source_url}:{text[:100]}")) % (2**63)
+    key = f"{user_id}:{source_url}:{text[:100]}"
+    point_id = int(hashlib.sha256(key.encode()).hexdigest(), 16) % (2**63)
     client.upsert(
         collection_name=COLLECTION_NAME,
         points=[PointStruct(

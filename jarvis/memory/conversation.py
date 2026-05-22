@@ -12,7 +12,8 @@ def _get_conn():
 
 
 def init_db():
-    with _get_conn() as conn:
+    conn = _get_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
@@ -21,15 +22,20 @@ def init_db():
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)
             """)
         conn.commit()
+    finally:
+        conn.close()
     logger.info("Conversation DB initialized")
 
 
 def load_history(user_id: str, limit: int = 20) -> list[BaseMessage]:
-    with _get_conn() as conn:
+    conn = _get_conn()
+    try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """SELECT role, content FROM conversations
@@ -37,6 +43,8 @@ def load_history(user_id: str, limit: int = 20) -> list[BaseMessage]:
                 (user_id, limit),
             )
             rows = cur.fetchall()
+    finally:
+        conn.close()
     messages: list[BaseMessage] = []
     for row in reversed(rows):
         if row["role"] == "human":
@@ -47,24 +55,31 @@ def load_history(user_id: str, limit: int = 20) -> list[BaseMessage]:
 
 
 def save_message(user_id: str, role: str, content: str):
-    with _get_conn() as conn:
+    conn = _get_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO conversations (user_id, role, content) VALUES (%s, %s, %s)",
                 (user_id, role, content),
             )
         conn.commit()
+    finally:
+        conn.close()
 
 
 def delete_history(user_id: str):
-    with _get_conn() as conn:
+    conn = _get_conn()
+    try:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
         conn.commit()
+    finally:
+        conn.close()
 
 
 def get_history_records(user_id: str) -> list[dict]:
-    with _get_conn() as conn:
+    conn = _get_conn()
+    try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """SELECT role, content, created_at::text FROM conversations
@@ -72,3 +87,5 @@ def get_history_records(user_id: str) -> list[dict]:
                 (user_id,),
             )
             return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
