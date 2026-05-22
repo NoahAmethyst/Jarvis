@@ -1,0 +1,74 @@
+import logging
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from jarvis.config import POSTGRES_DSN
+
+logger = logging.getLogger(__name__)
+
+
+def _get_conn():
+    return psycopg2.connect(POSTGRES_DSN)
+
+
+def init_db():
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+            """)
+        conn.commit()
+    logger.info("Conversation DB initialized")
+
+
+def load_history(user_id: str, limit: int = 20) -> list[BaseMessage]:
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT role, content FROM conversations
+                   WHERE user_id = %s ORDER BY created_at DESC LIMIT %s""",
+                (user_id, limit),
+            )
+            rows = cur.fetchall()
+    messages: list[BaseMessage] = []
+    for row in reversed(rows):
+        if row["role"] == "human":
+            messages.append(HumanMessage(content=row["content"]))
+        else:
+            messages.append(AIMessage(content=row["content"]))
+    return messages
+
+
+def save_message(user_id: str, role: str, content: str):
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO conversations (user_id, role, content) VALUES (%s, %s, %s)",
+                (user_id, role, content),
+            )
+        conn.commit()
+
+
+def delete_history(user_id: str):
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
+        conn.commit()
+
+
+def get_history_records(user_id: str) -> list[dict]:
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT role, content, created_at::text FROM conversations
+                   WHERE user_id = %s ORDER BY created_at""",
+                (user_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
