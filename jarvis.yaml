@@ -1,0 +1,260 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis
+
+---
+# ── 非敏感配置 ────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jarvis-config
+  namespace: jarvis
+data:
+  HTTP_PORT: "8080"
+  GRPC_PORT: "9090"
+  SILICONFLOW_BASE_URL: "https://api.siliconflow.cn/v1"
+  ANSWER_LLM: "siliconflow/deepseek-ai/DeepSeek-V4-Pro"
+  REFLECT_LLM: "siliconflow/moonshotai/Kimi-K2.6"
+  EMBED_MODEL: "siliconflow/Qwen/Qwen3-Embedding-8B"
+  VECTOR_SIZE: "4096"
+  QDRANT_URL: "http://qdrant:6333"
+  POSTGRES_DSN: "postgresql://postgres:postgres@postgres:5432/jarvis"
+  REFLECTION_SCORE_THRESHOLD: "0.7"
+  REFLECTION_MAX_RETRIES: "3"
+  KNOWLEDGE_MIN_LENGTH: "200"
+
+---
+# ── 敏感配置（部署前替换占位值）────────────────────────────────────────────────
+# 生产环境建议用 External Secrets Operator 或 Vault 注入
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jarvis-secrets
+  namespace: jarvis
+type: Opaque
+stringData:
+  SILICONFLOW_API_KEY: "REPLACE_ME"
+  OPENAI_API_KEY: ""
+  ANTHROPIC_API_KEY: ""
+  TAVILY_API_KEY: "REPLACE_ME"
+
+---
+# ── PostgreSQL ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: jarvis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: jarvis
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_PASSWORD
+              value: postgres
+            - name: POSTGRES_DB
+              value: jarvis
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: jarvis
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None  # Headless，StatefulSet 标准做法
+
+---
+# ── Qdrant ─────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-pvc
+  namespace: jarvis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant
+  namespace: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:latest
+          ports:
+            - containerPort: 6333
+            - containerPort: 6334
+          volumeMounts:
+            - name: data
+              mountPath: /qdrant/storage
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 6333
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 2
+              memory: 4Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: qdrant-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: jarvis
+spec:
+  selector:
+    app: qdrant
+  ports:
+    - name: http
+      port: 6333
+      targetPort: 6333
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+
+---
+# ── Jarvis 应用 ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis
+  namespace: jarvis
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jarvis
+  template:
+    metadata:
+      labels:
+        app: jarvis
+    spec:
+      containers:
+        - name: jarvis
+          image: jarvis:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: jarvis-config
+            - secretRef:
+                name: jarvis-secrets
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2
+              memory: 2Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis
+  namespace: jarvis
+spec:
+  selector:
+    app: jarvis
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
