@@ -110,3 +110,94 @@ def test_load_agents_multiple_agents(tmp_path):
     assert len(result) == 3
     names = {a.name for a in result}
     assert names == {"Agent0", "Agent1", "Agent2"}
+
+
+# ── dispatcher tests ─────────────────────────────────────────────────────────
+
+def _make_agent(name="TestAgent", description="Handles test queries", instructions="Be a tester."):
+    return AgentDefinition(name=name, description=description, instructions=instructions, source_file="test")
+
+
+def test_dispatch_no_agents_returns_none():
+    from jarvis.agents.dispatcher import dispatch_agent
+    result = dispatch_agent("what is 2+2?", [], threshold=0.6, model_spec="siliconflow/test")
+    assert result is None
+
+
+def test_dispatch_above_threshold_returns_agent():
+    from unittest.mock import MagicMock, patch
+    from jarvis.agents.dispatcher import dispatch_agent
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="0.9")
+
+    agent = _make_agent()
+    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+
+    assert result is agent
+
+
+def test_dispatch_below_threshold_returns_none():
+    from unittest.mock import MagicMock, patch
+    from jarvis.agents.dispatcher import dispatch_agent
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="0.3")
+
+    agent = _make_agent()
+    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+
+    assert result is None
+
+
+def test_dispatch_picks_highest_score():
+    from unittest.mock import MagicMock, patch
+    from jarvis.agents.dispatcher import dispatch_agent
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = [
+        MagicMock(content="0.4"),
+        MagicMock(content="0.85"),
+        MagicMock(content="0.6"),
+    ]
+
+    agents = [
+        _make_agent("A", "Low match agent"),
+        _make_agent("B", "High match agent"),
+        _make_agent("C", "Medium match agent"),
+    ]
+    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = dispatch_agent("test query", agents, threshold=0.6, model_spec="siliconflow/test")
+
+    assert result is not None
+    assert result.name == "B"
+
+
+def test_dispatch_llm_failure_returns_none():
+    from unittest.mock import MagicMock, patch
+    from jarvis.agents.dispatcher import dispatch_agent
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = Exception("LLM timeout")
+
+    agent = _make_agent()
+    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+
+    assert result is None
+
+
+def test_dispatch_malformed_score_excluded():
+    from unittest.mock import MagicMock, patch
+    from jarvis.agents.dispatcher import dispatch_agent
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="I cannot score this.")
+
+    agent = _make_agent()
+    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+
+    assert result is None

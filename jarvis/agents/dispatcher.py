@@ -1,0 +1,57 @@
+import re
+import logging
+from langchain_core.messages import HumanMessage
+from jarvis.agents import AgentDefinition
+from jarvis.llm.router import get_model
+
+logger = logging.getLogger(__name__)
+
+_SCORE_PROMPT = (
+    "Rate how well this user query matches the agent's capability description.\n\n"
+    "Query: {query}\n"
+    "Agent description: {description}\n\n"
+    "Respond with ONLY a decimal number between 0.0 and 1.0."
+)
+
+
+def _score_agent(query: str, agent: AgentDefinition, llm) -> float:
+    prompt = _SCORE_PROMPT.format(query=query, description=agent.description)
+    response = llm.invoke([HumanMessage(content=prompt)])
+    match = re.search(r"\d+\.?\d*", response.content)
+    if not match:
+        return 0.0
+    return max(0.0, min(1.0, float(match.group())))
+
+
+def dispatch_agent(
+    query: str,
+    agents: list[AgentDefinition],
+    threshold: float,
+    model_spec: str,
+) -> AgentDefinition | None:
+    if not agents:
+        return None
+    try:
+        llm = get_model(model_spec)
+        scored = []
+        for agent in agents:
+            try:
+                score = _score_agent(query, agent, llm)
+                scored.append((score, agent))
+            except Exception as e:
+                logger.warning("Failed to score agent %s: %s", agent.name, e)
+
+        if not scored:
+            return None
+
+        best_score, best_agent = max(scored, key=lambda x: x[0])
+        if best_score < threshold:
+            logger.debug("Best agent %s score %.2f below threshold %.2f", best_agent.name, best_score, threshold)
+            return None
+
+        logger.info("Dispatching to agent %s (score=%.2f)", best_agent.name, best_score)
+        return best_agent
+
+    except Exception as e:
+        logger.warning("Agent dispatch failed, falling back to default: %s", e)
+        return None
