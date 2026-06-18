@@ -42,6 +42,8 @@ def chat(req: ChatRequest):
         "low_confidence": False,
         "llm_override": req.llm,
         "reflect_llm_override": req.reflect_llm,
+        "active_agent": None,
+        "agent_dispatch_score": 0.0,
     }
     try:
         result = graph.invoke(initial_state)

@@ -23,6 +23,8 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             "low_confidence": False,
             "llm_override": request.llm or None,
             "reflect_llm_override": request.reflect_llm or None,
+            "active_agent": None,
+            "agent_dispatch_score": 0.0,
         }
         try:
             result = graph.invoke(initial_state)

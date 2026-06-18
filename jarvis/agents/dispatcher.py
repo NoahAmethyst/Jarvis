@@ -28,9 +28,10 @@ def dispatch_agent(
     agents: list[AgentDefinition],
     threshold: float,
     model_spec: str,
-) -> AgentDefinition | None:
+) -> tuple[AgentDefinition | None, float]:
+    """Return (selected_agent, best_score). selected_agent is None if below threshold or on error."""
     if not agents:
-        return None
+        return None, 0.0
     try:
         llm = get_model(model_spec)
         scored = []
@@ -42,16 +43,16 @@ def dispatch_agent(
                 logger.warning("Failed to score agent %s: %s", agent.name, e)
 
         if not scored:
-            return None
+            return None, 0.0
 
         best_score, best_agent = max(scored, key=lambda x: x[0])
         if best_score < threshold:
             logger.debug("Best agent %s score %.2f below threshold %.2f", best_agent.name, best_score, threshold)
-            return None
+            return None, best_score
 
         logger.info("Dispatching to agent %s (score=%.2f)", best_agent.name, best_score)
-        return best_agent
+        return best_agent, best_score
 
     except Exception as e:
         logger.warning("Agent dispatch failed, falling back to default: %s", e)
-        return None
+        return None, 0.0

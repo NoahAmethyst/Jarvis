@@ -14,6 +14,7 @@ def _make_graph_with_mocks():
 
     patches = [
         patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]),
+        patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]),
         patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""),
         patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm),
         patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_reflect_llm),
@@ -42,6 +43,8 @@ def test_graph_completes_single_turn():
             "low_confidence": False,
             "llm_override": None,
             "reflect_llm_override": None,
+            "active_agent": None,
+            "agent_dispatch_score": 0.0,
         }
         result = graph.invoke(initial_state)
         assert result["final_answer"] == "The answer is 42."
@@ -68,6 +71,7 @@ def test_graph_retries_on_low_score():
 
     patches = [
         patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]),
+        patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]),
         patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""),
         patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm),
         patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_reflect_llm),
@@ -91,6 +95,8 @@ def test_graph_retries_on_low_score():
             "low_confidence": False,
             "llm_override": None,
             "reflect_llm_override": None,
+            "active_agent": None,
+            "agent_dispatch_score": 0.0,
         }
         result = graph.invoke(initial_state)
         assert result["final_answer"] == "6 times 7 is 42."

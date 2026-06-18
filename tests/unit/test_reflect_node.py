@@ -17,6 +17,8 @@ def _base_state(**overrides) -> AgentState:
         "low_confidence": False,
         "llm_override": None,
         "reflect_llm_override": None,
+        "active_agent": None,
+        "agent_dispatch_score": 0.0,
     }
     state.update(overrides)
     return state

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client():
     with patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]), \
+         patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]), \
          patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""), \
          patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"), \
          patch("jarvis.agent.nodes.memory_write.know_mem.store_knowledge"):

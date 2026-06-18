@@ -120,8 +120,9 @@ def _make_agent(name="TestAgent", description="Handles test queries", instructio
 
 def test_dispatch_no_agents_returns_none():
     from jarvis.agents.dispatcher import dispatch_agent
-    result = dispatch_agent("what is 2+2?", [], threshold=0.6, model_spec="siliconflow/test")
-    assert result is None
+    agent, score = dispatch_agent("what is 2+2?", [], threshold=0.6, model_spec="siliconflow/test")
+    assert agent is None
+    assert score == 0.0
 
 
 def test_dispatch_above_threshold_returns_agent():
@@ -133,9 +134,10 @@ def test_dispatch_above_threshold_returns_agent():
 
     agent = _make_agent()
     with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
 
     assert result is agent
+    assert score == pytest.approx(0.9)
 
 
 def test_dispatch_below_threshold_returns_none():
@@ -147,9 +149,10 @@ def test_dispatch_below_threshold_returns_none():
 
     agent = _make_agent()
     with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
 
     assert result is None
+    assert score == pytest.approx(0.3)
 
 
 def test_dispatch_picks_highest_score():
@@ -169,10 +172,11 @@ def test_dispatch_picks_highest_score():
         _make_agent("C", "Medium match agent"),
     ]
     with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result = dispatch_agent("test query", agents, threshold=0.6, model_spec="siliconflow/test")
+        result, score = dispatch_agent("test query", agents, threshold=0.6, model_spec="siliconflow/test")
 
     assert result is not None
     assert result.name == "B"
+    assert score == pytest.approx(0.85)
 
 
 def test_dispatch_llm_failure_returns_none():
@@ -184,9 +188,10 @@ def test_dispatch_llm_failure_returns_none():
 
     agent = _make_agent()
     with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
 
     assert result is None
+    assert score == 0.0
 
 
 def test_dispatch_malformed_score_excluded():
@@ -198,6 +203,155 @@ def test_dispatch_malformed_score_excluded():
 
     agent = _make_agent()
     with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
 
     assert result is None
+
+
+# ── agent_dispatch node tests ─────────────────────────────────────────────────
+
+def test_agent_dispatch_node_no_agents_sets_none(tmp_path):
+    from unittest.mock import patch
+    from jarvis.agent.nodes.agent_dispatch import agent_dispatch
+    from jarvis.agent.state import AgentState
+    from langchain_core.messages import HumanMessage
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="hello")],
+        "history": [],
+        "user_id": "u1",
+        "query": "hello",
+        "rag_context": "",
+        "reflection_score": 0.0,
+        "retry_count": 0,
+        "final_answer": "",
+        "low_confidence": False,
+        "llm_override": None,
+        "reflect_llm_override": None,
+        "active_agent": None,
+        "agent_dispatch_score": 0.0,
+    }
+
+    with patch("jarvis.agent.nodes.agent_dispatch.AGENTS_DIR", str(tmp_path)):
+        result = agent_dispatch(state)
+
+    assert result["active_agent"] is None
+    assert result["agent_dispatch_score"] == 0.0
+
+
+def test_agent_dispatch_node_injects_agent(tmp_path):
+    from unittest.mock import MagicMock, patch
+    from jarvis.agent.nodes.agent_dispatch import agent_dispatch
+    from jarvis.agent.state import AgentState
+    from langchain_core.messages import HumanMessage
+
+    agent_dir = tmp_path / "billing-agent"
+    agent_dir.mkdir()
+    (agent_dir / "agent.yaml").write_text(
+        "name: BillingAgent\ndescription: Handles billing\ninstructions: Be a billing expert.\n"
+    )
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="I have a billing question")],
+        "history": [],
+        "user_id": "u1",
+        "query": "I have a billing question",
+        "rag_context": "",
+        "reflection_score": 0.0,
+        "retry_count": 0,
+        "final_answer": "",
+        "low_confidence": False,
+        "llm_override": None,
+        "reflect_llm_override": None,
+        "active_agent": None,
+        "agent_dispatch_score": 0.0,
+    }
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(content="0.9")
+
+    with patch("jarvis.agent.nodes.agent_dispatch.AGENTS_DIR", str(tmp_path)), \
+         patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+        result = agent_dispatch(state)
+
+    assert result["active_agent"] is not None
+    assert result["active_agent"].name == "BillingAgent"
+    assert result["agent_dispatch_score"] == 0.9
+
+
+def test_plan_and_call_injects_active_agent_instructions():
+    from unittest.mock import MagicMock, patch
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    from jarvis.agent.nodes.plan_and_call import plan_and_call
+    from jarvis.agent.state import AgentState
+
+    active = AgentDefinition(
+        name="BillingAgent",
+        description="Handles billing",
+        instructions="You are a billing specialist. Always verify invoice numbers.",
+        source_file="test",
+    )
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="billing question")],
+        "history": [],
+        "user_id": "u1",
+        "query": "billing question",
+        "rag_context": "",
+        "reflection_score": 0.0,
+        "retry_count": 0,
+        "final_answer": "",
+        "low_confidence": False,
+        "llm_override": None,
+        "reflect_llm_override": None,
+        "active_agent": active,
+        "agent_dispatch_score": 0.9,
+    }
+
+    mock_llm = MagicMock()
+    mock_llm.bind_tools.return_value = mock_llm
+    mock_llm.invoke.return_value = AIMessage(content="Invoice processed.")
+
+    with patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm):
+        plan_and_call(state)
+
+    call_args = mock_llm.invoke.call_args[0][0]
+    system_msg = call_args[0]
+    assert isinstance(system_msg, SystemMessage)
+    assert "You are a billing specialist." in system_msg.content
+
+
+def test_plan_and_call_no_active_agent_uses_default_prompt():
+    from unittest.mock import MagicMock, patch
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    from jarvis.agent.nodes.plan_and_call import plan_and_call
+    from jarvis.agent.state import AgentState
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="hello")],
+        "history": [],
+        "user_id": "u1",
+        "query": "hello",
+        "rag_context": "",
+        "reflection_score": 0.0,
+        "retry_count": 0,
+        "final_answer": "",
+        "low_confidence": False,
+        "llm_override": None,
+        "reflect_llm_override": None,
+        "active_agent": None,
+        "agent_dispatch_score": 0.0,
+    }
+
+    mock_llm = MagicMock()
+    mock_llm.bind_tools.return_value = mock_llm
+    mock_llm.invoke.return_value = AIMessage(content="Hello there.")
+
+    with patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm):
+        plan_and_call(state)
+
+    call_args = mock_llm.invoke.call_args[0][0]
+    system_msg = call_args[0]
+    assert isinstance(system_msg, SystemMessage)
+    assert "You are Jarvis" in system_msg.content
+    assert "billing specialist" not in system_msg.content
