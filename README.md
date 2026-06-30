@@ -11,9 +11,11 @@ HTTP :8080 / gRPC :9090
          │
   memory_load        ← 加载对话历史 + 用户档案
        ↓
+  agent_dispatch     ← LLM 语义评分，选择最匹配的自定义 Agent（低于阈值则跳过）
+       ↓
   rag_retrieve       ← Qdrant 检索相关知识
        ↓
-  plan_and_call      ← LLM 决策：调工具 or 直接回答
+  plan_and_call      ← LLM 决策：调工具 or 直接回答（注入 active_agent 指令）
        ↓
   tool_node          ← 搜索 / 抓取 / 第三方 API
        ↓
@@ -158,6 +160,8 @@ Proto 定义见 `jarvis/api/grpc/jarvis.proto`，服务名 `JarvisService`，提
 | `REFLECTION_SCORE_THRESHOLD` | `0.7` | 低于此分数触发重试 |
 | `REFLECTION_MAX_RETRIES` | `3` | 最大重试次数 |
 | `KNOWLEDGE_MIN_LENGTH` | `200` | 工具返回内容超过此长度自动入库 |
+| `AGENTS_DIR` | `.agents/skills` | 自定义 Agent 定义文件目录 |
+| `AGENT_DISPATCH_THRESHOLD` | `0.6` | Agent 匹配评分阈值，低于此值不激活 |
 
 ## 扩展工具
 
@@ -172,6 +176,57 @@ def my_tool(input: str) -> str:
 ```
 
 在 `jarvis/agent/graph.py` 顶部 import 该模块即可自动注册，无需修改图逻辑。
+
+## 自定义 Agent
+
+Jarvis 支持通过文件定义领域专属 Agent。每次对话时，`agent_dispatch` 节点用 LLM 对用户输入评分，选出最匹配的 Agent，其指令会注入 `plan_and_call` 的系统提示，改变模型行为。
+
+### 目录结构
+
+Agent 定义文件放在 `AGENTS_DIR`（默认 `.agents/skills/`），每个 Agent 独立子目录：
+
+```
+.agents/skills/
+└── my-agent/
+    └── agent.yaml       # 或 agent.json 或 SKILL.md
+```
+
+### 定义格式
+
+**agent.yaml**
+
+```yaml
+name: my-agent
+description: 当用户问 X 类问题时激活此 Agent
+---
+# 系统指令
+你是一个专注于 X 领域的助手。回答时...
+```
+
+**agent.json**
+
+```json
+{
+  "name": "my-agent",
+  "description": "当用户问 X 类问题时激活此 Agent",
+  "instructions": "你是一个专注于 X 领域的助手。"
+}
+```
+
+**SKILL.md**（frontmatter + Markdown 正文）
+
+```markdown
+---
+name: my-agent
+description: 当用户问 X 类问题时激活此 Agent
+---
+
+你是一个专注于 X 领域的助手。
+```
+
+### 评分与阈值
+
+`agent_dispatch` 调用 `REFLECT_LLM` 对每个 Agent 的 description 和用户 query 打分（0–1）。超过 `AGENT_DISPATCH_THRESHOLD`（默认 `0.6`）的最高分 Agent 被激活；全部低于阈值则不激活任何 Agent，走默认行为。
 
 ## 降级策略
 
@@ -211,7 +266,11 @@ jarvis/
 ├── agent/
 │   ├── state.py           # AgentState TypedDict
 │   ├── graph.py           # LangGraph 图定义
-│   └── nodes/             # 5 个节点实现
+│   └── nodes/             # 6 个节点实现
+├── agents/
+│   ├── __init__.py        # AgentDefinition dataclass
+│   ├── loader.py          # 扫描目录，解析 agent.json/yaml/SKILL.md
+│   └── dispatcher.py      # LLM 语义评分 + 阈值决策
 └── api/
     ├── http/routes.py     # FastAPI endpoints
     └── grpc/              # gRPC server + servicer + proto
