@@ -188,7 +188,9 @@ Agent 定义文件放在 `AGENTS_DIR`（默认 `.agents/skills/`），每个 Age
 ```
 .agents/skills/
 └── my-agent/
-    └── agent.yaml       # 或 agent.json 或 SKILL.md
+    ├── agent.yaml       # 或 agent.json 或 SKILL.md
+    └── agents/
+        └── openai.yaml  # 可选：为 SKILL.md 提供显示名称和简短描述
 ```
 
 ### 定义格式
@@ -223,6 +225,10 @@ description: 当用户问 X 类问题时激活此 Agent
 
 你是一个专注于 X 领域的助手。
 ```
+
+当 `SKILL.md` 未提供 `name` 或 `description` 时，Jarvis 会尝试读取同目录下的
+`agents/openai.yaml`，使用 `interface.display_name` 和
+`interface.short_description` 作为元数据兜底；系统指令仍取 `SKILL.md` 正文。
 
 ### 评分与阈值
 

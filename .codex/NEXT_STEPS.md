@@ -37,16 +37,17 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
    - `.venv/bin/python -m pytest tests/e2e -v`: 5 passed, 1
      Starlette/FastAPI TestClient deprecation warning.
    - `.venv/bin/python -m pytest tests/integration -v`: 3 passed.
-   - `.venv/bin/python -m pytest tests/ -v`: 39 passed, 1
+   - `.venv/bin/python -m pytest tests/ -v`: 40 passed, 1
      Starlette/FastAPI TestClient deprecation warning.
-3. Audit Agent dispatch behavior. Status: next.
-   - Decide whether `agents/openai.yaml` should be parsed as the spec says.
-   - If yes, add loader tests before implementation.
-   - Confirm whether `.agents/skills` should be packaged, mounted, or
-     configured in deployment.
-4. Audit deployment config. Status: pending.
-   - Add `AGENTS_DIR` and `AGENT_DISPATCH_THRESHOLD` to `jarvis.yaml` if the
-     Kubernetes manifest is meant to support custom Agent dispatch.
+3. Audit Agent dispatch behavior. Status: completed on 2026-07-09.
+   - `agents/openai.yaml` is parsed as Claude-style metadata fallback for
+     missing `SKILL.md` name/description.
+   - Added unit coverage for `openai.yaml` metadata fallback.
+   - Confirmed `.agents/skills` is included in Docker builds because there is
+     no `.dockerignore` and `Dockerfile` uses `COPY . .`.
+4. Audit deployment config. Status: partially completed on 2026-07-09.
+   - Added `AGENTS_DIR` and `AGENT_DISPATCH_THRESHOLD` to `jarvis.yaml`
+     ConfigMap.
    - Check readiness/liveness endpoints if `/docs` is disabled in production.
 5. Improve observability. Status: pending.
    - Consider structured logs for selected agent, score, retries, tool calls,

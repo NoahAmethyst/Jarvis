@@ -53,11 +53,16 @@ def _parse_claude(agent_dir: Path) -> AgentDefinition | None:
         parts = raw.split("---")
         if len(parts) < 3:
             return None
-        front = yaml.safe_load(parts[1])
+        front = yaml.safe_load(parts[1]) or {}
+        openai_yaml = agent_dir / "agents" / "openai.yaml"
+        interface = {}
+        if openai_yaml.exists():
+            openai_data = yaml.safe_load(openai_yaml.read_text()) or {}
+            interface = openai_data.get("interface", {}) or {}
         instructions = "---".join(parts[2:]).strip()
         return AgentDefinition(
-            name=front.get("name", agent_dir.name),
-            description=front.get("description", ""),
+            name=front.get("name") or interface.get("display_name") or agent_dir.name,
+            description=front.get("description") or interface.get("short_description") or "",
             instructions=instructions,
             source_file=str(skill_md),
         )

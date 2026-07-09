@@ -75,6 +75,30 @@ def test_load_agent_claude_format(tmp_path):
     assert "You are a Claude-style mentor." in a.instructions
 
 
+def test_load_agent_claude_format_uses_openai_yaml_metadata_fallback(tmp_path):
+    from jarvis.agents.loader import load_agents
+    agent_dir = tmp_path / "claude-agent"
+    agent_dir.mkdir()
+    agents_subdir = agent_dir / "agents"
+    agents_subdir.mkdir()
+    (agent_dir / "SKILL.md").write_text(
+        "---\nversion: 1\n---\n\nYou are a Claude-style mentor.\n"
+    )
+    (agents_subdir / "openai.yaml").write_text(
+        "interface:\n"
+        "  display_name: Claude Agent\n"
+        "  short_description: A Claude agent\n"
+    )
+
+    result = load_agents(str(tmp_path))
+
+    assert len(result) == 1
+    a = result[0]
+    assert a.name == "Claude Agent"
+    assert a.description == "A Claude agent"
+    assert "You are a Claude-style mentor." in a.instructions
+
+
 def test_load_agent_json_takes_priority_over_yaml(tmp_path):
     from jarvis.agents.loader import load_agents
     agent_dir = tmp_path / "both-formats"

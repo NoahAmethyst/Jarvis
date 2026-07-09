@@ -151,9 +151,10 @@ Thresholds come from:
   1. `agent.json`
   2. `agent.yaml`
   3. Claude-style `SKILL.md`
-- Implementation detail: current Claude-style parser reads `SKILL.md`
-  frontmatter and body. It does not currently consume
-  `agents/openai.yaml`, even though the design spec mentions that file.
+- Implementation detail: Claude-style parser reads `SKILL.md` frontmatter and
+  body. If `name` or `description` are missing, it falls back to
+  `agents/openai.yaml` `interface.display_name` and
+  `interface.short_description`.
 - Current local agent:
   - `.agents/skills/ai-agent-mentor/SKILL.md`
   - Used for Jarvis AI Agent learning, code walkthroughs, exercises,
@@ -206,8 +207,8 @@ Thresholds come from:
 - `jarvis.yaml`
   - Kubernetes manifests for namespace, ConfigMap, Secret, PostgreSQL,
     Qdrant, Jarvis deployment, and service.
-  - This file was already modified before Codex handoff; do not overwrite
-    without reviewing the user's existing change.
+  - ConfigMap includes Agent dispatch defaults: `AGENTS_DIR` and
+    `AGENT_DISPATCH_THRESHOLD`.
 
 ## Current Known Inconsistencies
 
@@ -215,10 +216,5 @@ Thresholds come from:
   by the user shows `ls | grep docs` returning `docs`. Treat `./docs` as the
   confirmed documentation/handoff directory; do not assume a separate `./docx`
   directory exists unless it appears in the filesystem.
-- The Agent dispatch design spec says Claude-style format includes
-  `agents/openai.yaml`; current loader does not read that file.
 - README says integration tests use real Qdrant/PostgreSQL, but current tests
   include significant mocking. Verify before relying on that statement.
-- `jarvis.yaml` does not currently expose `AGENTS_DIR` or
-  `AGENT_DISPATCH_THRESHOLD` in the ConfigMap, while `README.md` documents
-  those environment variables.

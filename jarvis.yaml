@@ -23,6 +23,8 @@ data:
   REFLECTION_SCORE_THRESHOLD: "0.7"
   REFLECTION_MAX_RETRIES: "3"
   KNOWLEDGE_MIN_LENGTH: "200"
+  AGENTS_DIR: ".agents/skills"
+  AGENT_DISPATCH_THRESHOLD: "0.6"
 
 ---
 # ── 敏感配置（部署前替换占位值）────────────────────────────────────────────────
