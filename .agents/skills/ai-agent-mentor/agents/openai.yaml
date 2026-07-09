@@ -1,0 +1,7 @@
+interface:
+  display_name: "AI Agent Mentor"
+  short_description: "Jarvis 项目 AI Agent 专业学习导师"
+  default_prompt: "Use $ai-agent-mentor to guide my AI Agent development learning in the Jarvis project."
+
+policy:
+  allow_implicit_invocation: true
