@@ -25,30 +25,33 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
 
 ## Recommended Technical Plan
 
-1. Stabilize project memory and docs.
+1. Stabilize project memory and docs. Status: ongoing.
    - Keep `.codex/PROJECT_CONTEXT.md` aligned with code.
    - Keep `README.md` aligned with runtime behavior.
    - Treat `./docs` as the confirmed handoff/documentation directory. The
      earlier `./docx` mention was a path-name confusion corrected by the user's
      screenshot showing `ls | grep docs`.
-2. Verify the full test suite in the local environment.
-   - Start with `pytest tests/unit -v`.
-   - Then run `pytest tests/e2e -v`.
-   - Run integration tests only after deciding whether real PostgreSQL/Qdrant
-     should be started with Docker.
-3. Audit Agent dispatch behavior.
+2. Verify the full test suite in the local environment. Status: completed on
+   2026-07-09 with a local `.venv`.
+   - `.venv/bin/python -m pytest tests/unit -v`: 31 passed.
+   - `.venv/bin/python -m pytest tests/e2e -v`: 5 passed, 1
+     Starlette/FastAPI TestClient deprecation warning.
+   - `.venv/bin/python -m pytest tests/integration -v`: 3 passed.
+   - `.venv/bin/python -m pytest tests/ -v`: 39 passed, 1
+     Starlette/FastAPI TestClient deprecation warning.
+3. Audit Agent dispatch behavior. Status: next.
    - Decide whether `agents/openai.yaml` should be parsed as the spec says.
    - If yes, add loader tests before implementation.
    - Confirm whether `.agents/skills` should be packaged, mounted, or
      configured in deployment.
-4. Audit deployment config.
+4. Audit deployment config. Status: pending.
    - Add `AGENTS_DIR` and `AGENT_DISPATCH_THRESHOLD` to `jarvis.yaml` if the
      Kubernetes manifest is meant to support custom Agent dispatch.
    - Check readiness/liveness endpoints if `/docs` is disabled in production.
-5. Improve observability.
+5. Improve observability. Status: pending.
    - Consider structured logs for selected agent, score, retries, tool calls,
      and degraded memory/RAG paths.
-6. Clarify Memory/RAG persistence behavior.
+6. Clarify Memory/RAG persistence behavior. Status: pending.
    - Current automatic knowledge writing stores any long `ToolMessage`, not
      only web search/scrape results.
    - If source-specific behavior is required, tests should cover it.
