@@ -28,6 +28,10 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
 1. Stabilize project memory and docs.
    - Keep `.codex/PROJECT_CONTEXT.md` aligned with code.
    - Keep `README.md` aligned with runtime behavior.
+   - Recheck `./docx` at the start of the next session. The user reports that
+     this directory exists and contains Claude Code handoff content, but it was
+     not visible from the current tool-visible worktree during the 2026-07-09
+     correction pass.
 2. Verify the full test suite in the local environment.
    - Start with `pytest tests/unit -v`.
    - Then run `pytest tests/e2e -v`.

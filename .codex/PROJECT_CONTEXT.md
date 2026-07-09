@@ -205,8 +205,13 @@ Thresholds come from:
 
 ## Current Known Inconsistencies
 
-- The user mentioned a `docx` directory with Claude Code content, but no such
-  directory or `.docx` file was found at handoff time.
+- User correction on 2026-07-09: the repository is expected to contain a
+  `./docx` directory with Claude Code handoff content. The tool-visible
+  worktree at `/Users/amethyst/Jarvis` did not show this path when rechecked
+  with `ls`, `stat`, `find`, `rg --files -uu`, `git ls-tree`, and `git log`.
+  Do not treat the earlier "no docx directory" note as settled truth. At the
+  start of future handoff or documentation work, verify `./docx` again and, if
+  visible, read and summarize its contents into this file.
 - The Agent dispatch design spec says Claude-style format includes
   `agents/openai.yaml`; current loader does not read that file.
 - README says integration tests use real Qdrant/PostgreSQL, but current tests

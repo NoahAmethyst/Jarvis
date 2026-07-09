@@ -37,9 +37,12 @@ HTTP/gRPC request
 
 - The project was originally created/executed by Claude Code. Codex is now
   taking over by maintaining durable memory in this directory.
-- The user mentioned a `docx` directory with Claude Code content, but no
-  `docx/` directory and no `.doc`/`.docx` files were found in the repository
-  during this handoff scan.
+- User correction on 2026-07-09: the repository is expected to contain a
+  `./docx` directory with Claude Code handoff content. A follow-up check from
+  the current tool-visible worktree at `/Users/amethyst/Jarvis` did not show
+  that path, so future sessions must verify `./docx` directly before relying on
+  either assumption. If it is still not visible, ask whether the local worktree
+  needs to be refreshed or whether the path differs.
 - Existing uncommitted work before this handoff included `jarvis.yaml`,
   `.agents/`, and `docs/study/`. Treat those as user or prior-agent changes;
   do not revert them without explicit instruction.
