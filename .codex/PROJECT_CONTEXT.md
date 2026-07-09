@@ -174,6 +174,12 @@ Thresholds come from:
   - Learning path for AI Agent concepts mapped to Jarvis code.
   - `docs/study/interaction` stores learning profile, staged plan, interview
     framing, and teaching protocol.
+- User screenshot correction on 2026-07-09 confirmed the relevant handoff
+  directory is `./docs`, not `./docx`. Current `docs` contents include
+  `docs/superpowers/plans/2026-05-22-jarvis-implementation.md`,
+  `docs/superpowers/specs/2026-05-22-jarvis-design.md`,
+  `docs/superpowers/specs/2026-06-18-agent-dispatch-design.md`, and the
+  `docs/study` learning materials.
 
 ## Tests
 
@@ -205,13 +211,10 @@ Thresholds come from:
 
 ## Current Known Inconsistencies
 
-- User correction on 2026-07-09: the repository is expected to contain a
-  `./docx` directory with Claude Code handoff content. The tool-visible
-  worktree at `/Users/amethyst/Jarvis` did not show this path when rechecked
-  with `ls`, `stat`, `find`, `rg --files -uu`, `git ls-tree`, and `git log`.
-  Do not treat the earlier "no docx directory" note as settled truth. At the
-  start of future handoff or documentation work, verify `./docx` again and, if
-  visible, read and summarize its contents into this file.
+- Earlier `.codex` notes confused `docx` with `docs`. The screenshot provided
+  by the user shows `ls | grep docs` returning `docs`. Treat `./docs` as the
+  confirmed documentation/handoff directory; do not assume a separate `./docx`
+  directory exists unless it appears in the filesystem.
 - The Agent dispatch design spec says Claude-style format includes
   `agents/openai.yaml`; current loader does not read that file.
 - README says integration tests use real Qdrant/PostgreSQL, but current tests
