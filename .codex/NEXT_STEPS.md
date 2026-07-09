@@ -31,6 +31,11 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
    - Treat `./docs` as the confirmed handoff/documentation directory. The
      earlier `./docx` mention was a path-name confusion corrected by the user's
      screenshot showing `ls | grep docs`.
+   - Current execution plan is
+     `docs/superpowers/plans/2026-07-09-jarvis-current-state-next-steps.md`.
+   - The original bootstrap plan
+     `docs/superpowers/plans/2026-05-22-jarvis-implementation.md` is preserved
+     as historical and should not be executed directly.
 2. Verify the full test suite in the local environment. Status: completed on
    2026-07-09 with a local `.venv`.
    - `.venv/bin/python -m pytest tests/unit -v`: 31 passed.
@@ -49,6 +54,9 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
    - Added `AGENTS_DIR` and `AGENT_DISPATCH_THRESHOLD` to `jarvis.yaml`
      ConfigMap.
    - Check readiness/liveness endpoints if `/docs` is disabled in production.
+   - Because Jarvis will deploy to a remote server, ask the user before any
+     Docker image build, image push, Docker Compose action, `kubectl` command,
+     SSH command, or remote server change.
 5. Improve observability. Status: pending.
    - Consider structured logs for selected agent, score, retries, tool calls,
      and degraded memory/RAG paths.
