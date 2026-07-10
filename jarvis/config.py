@@ -5,6 +5,7 @@ load_dotenv()
 
 HTTP_PORT = int(os.getenv("HTTP_PORT", "8080"))
 GRPC_PORT = int(os.getenv("GRPC_PORT", "9090"))
+LLM_CONFIG_PATH = os.getenv("LLM_CONFIG_PATH", "llm.yaml")
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")

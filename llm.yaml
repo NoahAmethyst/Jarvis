@@ -1,0 +1,65 @@
+providers:
+  deepseek:
+    adapter: deepseek
+    base_url: https://api.deepseek.com
+    base_url_env: DEEPSEEK_BASE_URL
+    api_key_env: DEEPSEEK_API_KEY
+    capabilities:
+      tools: true
+      thinking: true
+
+  openai:
+    adapter: openai_compatible
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    capabilities:
+      tools: true
+      thinking: false
+
+  siliconflow:
+    adapter: openai_compatible
+    base_url: https://api.siliconflow.cn/v1
+    base_url_env: SILICONFLOW_BASE_URL
+    api_key_env: SILICONFLOW_API_KEY
+    capabilities:
+      tools: true
+      thinking: false
+    limits:
+      max_messages: 10
+
+  claude:
+    adapter: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+    capabilities:
+      tools: true
+      thinking: false
+
+profiles:
+  answer:
+    model: deepseek/deepseek-v4-pro
+    tools: enabled
+    thinking:
+      mode: enabled
+      effort: high
+      on_unsupported: disable
+    retry:
+      max_attempts: 2
+      base_delay_seconds: 0.25
+
+  reflection:
+    model: deepseek/deepseek-v4-flash
+    tools: disabled
+    thinking:
+      mode: disabled
+    retry:
+      max_attempts: 2
+      base_delay_seconds: 0.25
+
+  agent_dispatch:
+    model: deepseek/deepseek-v4-flash
+    tools: disabled
+    thinking:
+      mode: disabled
+    retry:
+      max_attempts: 1
+      base_delay_seconds: 0.0
