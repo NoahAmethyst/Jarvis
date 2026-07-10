@@ -2,6 +2,15 @@ import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
 from fastapi.testclient import TestClient
+from jarvis.llm.errors import (
+    LLMConfigurationError,
+    LLMContextLimitError,
+    LLMInvalidRequestError,
+    LLMInvalidResponseError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
 
 
 @pytest.fixture
@@ -34,6 +43,31 @@ def test_chat_returns_answer(client):
 def test_chat_missing_user_id_returns_422(client):
     resp = client.post("/chat", json={"message": "hello"})
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code"),
+    [
+        (LLMInvalidRequestError("invalid LLM request"), 400),
+        (LLMContextLimitError("LLM context limit exceeded"), 400),
+        (LLMConfigurationError("selected LLM provider is not configured"), 500),
+        (LLMRateLimitError("LLM rate limit exceeded"), 429),
+        (LLMTimeoutError("LLM request timed out"), 504),
+        (LLMUnavailableError("LLM provider unavailable"), 503),
+        (LLMInvalidResponseError("LLM provider returned an invalid response"), 502),
+    ],
+)
+def test_chat_maps_normalized_llm_errors(client, error, status_code):
+    error.__cause__ = RuntimeError("raw provider secret sk-test")
+    with patch("jarvis.api.http.routes.graph.invoke", side_effect=error):
+        response = client.post(
+            "/chat",
+            json={"message": "hello", "user_id": "u1"},
+        )
+
+    assert response.status_code == status_code
+    assert response.json() == {"detail": str(error)}
+    assert "sk-test" not in response.text
 
 
 def test_ingest_stores_knowledge(client):

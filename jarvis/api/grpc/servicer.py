@@ -2,10 +2,35 @@ import grpc
 from jarvis.api.grpc import jarvis_pb2, jarvis_pb2_grpc
 from jarvis.agent.graph import graph
 from jarvis.agent.state import AgentState
-from jarvis.llm.router import ProviderNotFoundError, ProviderUnavailableError
+from jarvis.llm.errors import (
+    LLMConfigurationError,
+    LLMContextLimitError,
+    LLMError,
+    LLMInvalidRequestError,
+    LLMInvalidResponseError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
 from jarvis.memory import conversation as conv_mem
 from jarvis.memory import knowledge as know_mem
 from langchain_core.messages import HumanMessage
+
+
+def _llm_grpc_status(error: LLMError):
+    if isinstance(error, (LLMContextLimitError, LLMInvalidRequestError)):
+        return grpc.StatusCode.INVALID_ARGUMENT
+    if isinstance(error, LLMConfigurationError):
+        return grpc.StatusCode.FAILED_PRECONDITION
+    if isinstance(error, LLMRateLimitError):
+        return grpc.StatusCode.RESOURCE_EXHAUSTED
+    if isinstance(error, LLMTimeoutError):
+        return grpc.StatusCode.DEADLINE_EXCEEDED
+    if isinstance(error, LLMUnavailableError):
+        return grpc.StatusCode.UNAVAILABLE
+    if isinstance(error, LLMInvalidResponseError):
+        return grpc.StatusCode.INTERNAL
+    return grpc.StatusCode.INTERNAL
 
 
 class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
@@ -28,13 +53,9 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
         }
         try:
             result = graph.invoke(initial_state)
-        except ProviderNotFoundError as e:
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(e))
-            return jarvis_pb2.ChatResponse()
-        except ProviderUnavailableError as e:
-            context.set_code(grpc.StatusCode.UNAVAILABLE)
-            context.set_details(str(e))
+        except LLMError as error:
+            context.set_code(_llm_grpc_status(error))
+            context.set_details(str(error))
             return jarvis_pb2.ChatResponse()
         return jarvis_pb2.ChatResponse(
             answer=result["final_answer"],

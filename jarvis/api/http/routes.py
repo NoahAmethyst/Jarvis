@@ -2,7 +2,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from jarvis.agent.graph import graph
 from jarvis.agent.state import AgentState
-from jarvis.llm.router import ProviderNotFoundError, ProviderUnavailableError
+from jarvis.llm.errors import (
+    LLMConfigurationError,
+    LLMContextLimitError,
+    LLMError,
+    LLMInvalidRequestError,
+    LLMInvalidResponseError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
 from jarvis.memory import conversation as conv_mem
 from jarvis.memory import knowledge as know_mem
 from langchain_core.messages import HumanMessage
@@ -28,6 +37,22 @@ class IngestRequest(BaseModel):
     user_id: str
 
 
+def _llm_http_status(error: LLMError) -> int:
+    if isinstance(error, (LLMContextLimitError, LLMInvalidRequestError)):
+        return 400
+    if isinstance(error, LLMConfigurationError):
+        return 500
+    if isinstance(error, LLMRateLimitError):
+        return 429
+    if isinstance(error, LLMTimeoutError):
+        return 504
+    if isinstance(error, LLMUnavailableError):
+        return 503
+    if isinstance(error, LLMInvalidResponseError):
+        return 502
+    return 500
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     initial_state: AgentState = {
@@ -47,10 +72,11 @@ def chat(req: ChatRequest):
     }
     try:
         result = graph.invoke(initial_state)
-    except ProviderNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ProviderUnavailableError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    except LLMError as error:
+        raise HTTPException(
+            status_code=_llm_http_status(error),
+            detail=str(error),
+        ) from None
     return ChatResponse(answer=result["final_answer"], low_confidence=result["low_confidence"])
 
 
