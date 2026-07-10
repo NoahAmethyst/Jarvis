@@ -25,7 +25,8 @@ These rules are mandatory for future Codex sessions in this repository.
 
 1. Do not revert unrelated changes you did not make.
 2. Stage only files that belong to the current task.
-3. After modifications, create a git commit.
+3. After modifications, create a git commit unless the user explicitly asks
+   not to commit.
 4. Commit message format must be:
 
 ```text
@@ -45,6 +46,18 @@ artifacts, and `OPTIMIZE` for refactors or performance/readability improvements.
    readable, and inspect `git diff --check`.
 4. Record any skipped verification in the final response.
 
+## Automated Review Gate
+
+1. When code or design would normally require confirmation, invoke an
+   independent code-review Agent instead of waiting for manual user approval.
+2. Resolve all Critical findings before proceeding. Resolve Important findings
+   or record a concrete reason why they do not apply.
+3. Re-run the code-review Agent after material fixes to design documents or
+   implementation.
+4. Human confirmation is still required for product choices that cannot be
+   inferred safely and for every deployment action listed below. The review
+   Agent does not authorize deployment.
+
 ## Project-Specific Guardrails
 
 1. Jarvis is a backend Agent service, not a frontend app.
@@ -56,3 +69,6 @@ artifacts, and `OPTIMIZE` for refactors or performance/readability improvements.
    configuration. Do not delete or rewrite it casually.
 5. New tools should be added through `@register_tool` and imported from
    `jarvis/agent/graph.py` so registration happens at graph import time.
+6. Before building or pushing an image, running Docker Compose, running
+   `kubectl`, using SSH, or changing a remote server, ask the user and wait for
+   explicit approval.

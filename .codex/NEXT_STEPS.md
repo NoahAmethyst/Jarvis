@@ -23,6 +23,38 @@ Observed before creating `.codex`:
 Treat these as pre-existing changes. The `.codex` commit should stage only
 `.codex` files unless the user explicitly asks for more.
 
+The snapshot above is historical. Always trust the current
+`git status --short --branch` output over this block.
+
+## Active LLM Gateway Work
+
+Status on 2026-07-10: design and implementation plan passed final automated
+code review with no remaining Critical or Important findings. Local
+implementation is ready to execute without an additional human approval gate.
+
+- Design spec:
+  `docs/superpowers/specs/2026-07-10-configurable-llm-gateway-design.md`.
+- Implementation plan:
+  `docs/superpowers/plans/2026-07-10-configurable-llm-gateway.md`.
+- All default chat profiles will use the direct DeepSeek API.
+- `answer` uses `deepseek-v4-pro` with high-effort thinking and tools.
+- `reflection` and `agent_dispatch` use `deepseek-v4-flash` with thinking and
+  tools disabled.
+- SiliconFlow remains the default embedding provider.
+- OpenAI, Claude, and SiliconFlow Chat remain optional model overrides behind
+  protocol adapters.
+- The `answer` profile explicitly disables thinking when an override does not
+  support it, while tool capability remains required. This preserves old
+  provider override compatibility without changing DeepSeek defaults.
+- Provider additions within a known protocol family are configuration-only.
+- DeepSeek reasoning/tool messages are preserved only inside one graph
+  execution. Persistent history continues to store final user/assistant text,
+  so incomplete tool reasoning is never replayed across requests.
+- After the design file passes automated code review, write and review the
+  implementation plan, then execute it with tests.
+- Do not build an image or perform deployment actions without explicit user
+  approval.
+
 ## Recommended Technical Plan
 
 1. Stabilize project memory and docs. Status: ongoing.
