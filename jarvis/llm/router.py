@@ -1,3 +1,8 @@
+"""Deprecated raw-model router kept for external compatibility.
+
+Production Jarvis callers use the profile gateway exposed as `jarvis.llm.llm`.
+"""
+
 import logging
 from langchain_core.language_models import BaseChatModel
 from jarvis.llm.siliconflow import SiliconFlowProvider
@@ -22,6 +27,7 @@ class ProviderUnavailableError(RuntimeError):
 
 
 def get_model(model_spec: str, **kwargs) -> BaseChatModel:
+    """Return a raw legacy model; new code must use `llm.chat()` instead."""
     parts = model_spec.split("/", 1)
     if len(parts) != 2:
         logger.error(f"Invalid model spec: {model_spec}")

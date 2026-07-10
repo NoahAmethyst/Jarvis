@@ -113,7 +113,7 @@ jarvis.yaml
 - Produces: the complete normalized `LLMError` hierarchy used by later tasks.
 - Consumes: `LLM_CONFIG_PATH`, default `llm.yaml`.
 
-- [ ] **Step 1: Write failing configuration tests**
+- [x] **Step 1: Write failing configuration tests**
 
 Cover these exact cases in `tests/unit/test_llm_config.py`:
 
@@ -176,7 +176,7 @@ def test_unused_provider_key_is_not_required(monkeypatch):
     assert "claude" in settings.providers
 ```
 
-- [ ] **Step 2: Run the tests and verify red**
+- [x] **Step 2: Run the tests and verify red**
 
 Run:
 
@@ -186,7 +186,7 @@ Run:
 
 Expected: collection fails because `jarvis.llm.config` does not exist.
 
-- [ ] **Step 3: Add the normalized exception hierarchy**
+- [x] **Step 3: Add the normalized exception hierarchy**
 
 Create `jarvis/llm/errors.py` before configuration parsing uses it:
 
@@ -219,7 +219,7 @@ class LLMInvalidResponseError(LLMError):
 Every later raise site uses stable public text and preserves internal causes
 with exception chaining.
 
-- [ ] **Step 4: Add dependencies and configuration models**
+- [x] **Step 4: Add dependencies and configuration models**
 
 Add to `pyproject.toml`:
 
@@ -256,7 +256,7 @@ class RetrySettings(BaseModel):
 Validate that every profile model references a configured provider and that
 enabled thinking has an effort. Do not read provider API keys during YAML load.
 
-- [ ] **Step 5: Add `llm.yaml` exactly from the approved spec**
+- [x] **Step 5: Add `llm.yaml` exactly from the approved spec**
 
 Include DeepSeek, OpenAI, SiliconFlow Chat, and Claude providers. Give DeepSeek
 and SiliconFlow both a literal default `base_url` and a `base_url_env` override.
@@ -264,7 +264,7 @@ Configure SiliconFlow Chat `limits.max_messages: 10`. Configure the three
 approved profiles and their retry blocks. The `answer` profile must set
 `thinking.on_unsupported: disable`.
 
-- [ ] **Step 6: Synchronize the local virtual environment**
+- [x] **Step 6: Synchronize the local virtual environment**
 
 ```bash
 .venv/bin/python -m pip install -e ".[dev]"
@@ -274,7 +274,7 @@ Expected: `langchain-deepseek>=1.1.0,<2.0.0` is installed and Jarvis remains an
 editable install. This is a local dependency action, not an image build or
 deployment.
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_config.py -v
@@ -282,7 +282,7 @@ deployment.
 
 Expected: all configuration tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git status --short
@@ -310,7 +310,7 @@ git commit -m "FEATURE
 - Produces: `JarvisChatDeepSeek(ChatDeepSeek)` with reasoning replay.
 - Consumes: normalized `LLMError` subclasses from Task 1.
 
-- [ ] **Step 1: Write failing adapter and error tests**
+- [x] **Step 1: Write failing adapter and error tests**
 
 Tests must assert:
 
@@ -443,7 +443,7 @@ registry membership, `max_retries=0`, safe exception text, a non-empty
 `base_url_env` overriding the literal URL, and an empty environment value
 falling back to the literal URL.
 
-- [ ] **Step 2: Run adapter tests and verify red**
+- [x] **Step 2: Run adapter tests and verify red**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_adapters.py -v
@@ -451,7 +451,7 @@ falling back to the literal URL.
 
 Expected: imports fail because adapters and errors do not exist.
 
-- [ ] **Step 3: Implement adapter construction**
+- [x] **Step 3: Implement adapter construction**
 
 `BaseAdapter` resolves `api_key_env`, optional `base_url`, and optional
 `base_url_env`. A non-empty environment value overrides the literal URL; the
@@ -475,7 +475,7 @@ JarvisChatDeepSeek(
 
 Do not send DeepSeek sampling parameters in thinking mode.
 
-- [ ] **Step 4: Implement `JarvisChatDeepSeek` replay**
+- [x] **Step 4: Implement `JarvisChatDeepSeek` replay**
 
 Override `_get_request_payload()` narrowly:
 
@@ -493,7 +493,7 @@ def _get_request_payload(self, input_, *, stop=None, **kwargs):
 
 Do not modify content, tool-call encoding, order, or any non-DeepSeek adapter.
 
-- [ ] **Step 5: Run adapter tests**
+- [x] **Step 5: Run adapter tests**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_adapters.py -v
@@ -501,7 +501,7 @@ Do not modify content, tool-call encoding, order, or any non-DeepSeek adapter.
 
 Expected: all tests pass without network access.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git status --short
@@ -525,7 +525,7 @@ git commit -m "FEATURE
 - Produces: lazy module facade `jarvis.llm.llm` and cached `get_llm()`.
 - Consumes: `LLMSettings`, fixed `ADAPTERS`, LangChain messages and tools.
 
-- [ ] **Step 1: Write failing gateway tests**
+- [x] **Step 1: Write failing gateway tests**
 
 Cover profile selection, first-slash overrides, explicit thinking fallback,
 required tools, legal message groups, retries, and error normalization:
@@ -587,7 +587,7 @@ results remain. Add a mandatory-group-too-large context error test.
 Add transient retry tests proving exactly `max_attempts` calls and no retry for
 invalid request/config/response errors. Patch `time.sleep`.
 
-- [ ] **Step 2: Run gateway tests and verify red**
+- [x] **Step 2: Run gateway tests and verify red**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_gateway.py -v
@@ -595,7 +595,7 @@ invalid request/config/response errors. Patch `time.sleep`.
 
 Expected: import fails because `LLMGateway` does not exist.
 
-- [ ] **Step 3: Implement profile and capability resolution**
+- [x] **Step 3: Implement profile and capability resolution**
 
 `chat()` must:
 
@@ -614,7 +614,7 @@ Expected: import fails because `LLMGateway` does not exist.
 12. require DeepSeek `reasoning_content` when enabled thinking returns tool
     calls.
 
-- [ ] **Step 4: Implement legal message grouping**
+- [x] **Step 4: Implement legal message grouping**
 
 Use a private `_group_messages()` state machine. An `AIMessage` with tool calls
 starts an atomic group; consume following `ToolMessage`s until every unique
@@ -625,7 +625,7 @@ For `max_messages`, mark all system groups and the group containing the last
 until within the limit. If mandatory groups alone exceed the limit, raise
 `LLMContextLimitError`.
 
-- [ ] **Step 5: Implement normalized invocation and retry**
+- [x] **Step 5: Implement normalized invocation and retry**
 
 Map known OpenAI/Anthropic timeout, rate-limit, connection, invalid-request,
 and 5xx exceptions to the approved hierarchy. Unknown provider exceptions map
@@ -633,7 +633,7 @@ to `LLMUnavailableError`. Log only exception class plus safe provider/model
 identifiers. Retry only `LLMRateLimitError`, `LLMTimeoutError`, and
 `LLMUnavailableError` according to the profile.
 
-- [ ] **Step 6: Export a lazy facade**
+- [x] **Step 6: Export a lazy facade**
 
 In `jarvis/llm/__init__.py`, avoid loading YAML during package import:
 
@@ -659,7 +659,7 @@ and imports `jarvis.llm.router`; import must succeed without loading YAML. The
 first `llm.chat()` call loads and validates YAML, while provider keys remain
 lazy until adapter construction.
 
-- [ ] **Step 7: Run gateway and adapter tests**
+- [x] **Step 7: Run gateway and adapter tests**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_config.py tests/unit/test_llm_adapters.py tests/unit/test_llm_gateway.py -v
@@ -667,7 +667,7 @@ lazy until adapter construction.
 
 Expected: all tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git status --short
@@ -695,7 +695,7 @@ git commit -m "FEATURE
 - Consumes: `jarvis.llm.llm.chat(...)` only.
 - Produces: unchanged graph node return dictionaries and dispatch fallback.
 
-- [ ] **Step 1: Write caller seam tests**
+- [x] **Step 1: Write caller seam tests**
 
 Patch `llm.chat` and assert exact calls:
 
@@ -719,7 +719,7 @@ assert "jarvis.llm.router" not in source
 assert "get_model" not in source
 ```
 
-- [ ] **Step 2: Run caller tests and verify red**
+- [x] **Step 2: Run caller tests and verify red**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_callers.py -v
@@ -727,19 +727,19 @@ assert "get_model" not in source
 
 Expected: current nodes still import `get_model`.
 
-- [ ] **Step 3: Migrate answer and reflection**
+- [x] **Step 3: Migrate answer and reflection**
 
 Keep prompt construction and score parsing unchanged. Replace model creation,
 binding, and invocation with gateway calls. The `answer` caller supplies
 `get_tools()`; reflection supplies no tools.
 
-- [ ] **Step 4: Migrate agent dispatch**
+- [x] **Step 4: Migrate agent dispatch**
 
 Change `dispatch_agent` to accept `model_override: str | None` rather than a
 required default `model_spec`. `_score_agent` calls the `agent_dispatch`
 profile. Preserve per-agent failure isolation and the outer graceful fallback.
 
-- [ ] **Step 5: Update existing mocks and run node tests**
+- [x] **Step 5: Update existing mocks and run node tests**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_callers.py tests/unit/test_reflect_node.py tests/unit/test_agent_dispatch.py tests/integration/test_graph_flow.py -v
@@ -747,7 +747,7 @@ profile. Preserve per-agent failure isolation and the outer graceful fallback.
 
 Expected: all tests pass and graph behavior is unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git status --short
@@ -771,7 +771,7 @@ git commit -m "OPTIMIZE
 - Consumes: every concrete `LLMError`.
 - Produces: approved HTTP status and gRPC status mappings with safe details.
 
-- [ ] **Step 1: Write parameterized HTTP mapping tests**
+- [x] **Step 1: Write parameterized HTTP mapping tests**
 
 Patch `graph.invoke` to raise each safe error and assert:
 
@@ -790,13 +790,13 @@ HTTP_CASES = [
 Assert response details equal only the safe message and do not contain a fake
 key or raw cause.
 
-- [ ] **Step 2: Write equivalent direct gRPC servicer tests**
+- [x] **Step 2: Write equivalent direct gRPC servicer tests**
 
 Use a `FakeContext` recording `set_code` and `set_details`. Assert mappings to
 `INVALID_ARGUMENT`, `FAILED_PRECONDITION`, `RESOURCE_EXHAUSTED`,
 `DEADLINE_EXCEEDED`, `UNAVAILABLE`, and `INTERNAL`.
 
-- [ ] **Step 3: Run mapping tests and verify red**
+- [x] **Step 3: Run mapping tests and verify red**
 
 ```bash
 .venv/bin/python -m pytest tests/e2e/test_api.py tests/unit/test_grpc_servicer.py -v
@@ -804,13 +804,13 @@ Use a `FakeContext` recording `set_code` and `set_details`. Assert mappings to
 
 Expected: new cases fail because routes catch only legacy router errors.
 
-- [ ] **Step 4: Replace legacy exception handling**
+- [x] **Step 4: Replace legacy exception handling**
 
 Both API boundaries must catch every concrete `LLMError` exactly once and use
 the approved mapping. Do not return `str()` from arbitrary exceptions in the
 chat endpoint. Leave ingest and memory behavior outside this task.
 
-- [ ] **Step 5: Run API tests**
+- [x] **Step 5: Run API tests**
 
 ```bash
 .venv/bin/python -m pytest tests/e2e/test_api.py tests/unit/test_grpc_servicer.py -v
@@ -818,7 +818,7 @@ chat endpoint. Leave ingest and memory behavior outside this task.
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git status --short
@@ -848,7 +848,7 @@ git commit -m "FIX
 - Preserves: request `llm`/`reflect_llm` fields and legacy router import for
   non-production callers.
 
-- [ ] **Step 1: Update environment examples**
+- [x] **Step 1: Update environment examples**
 
 Remove `ANSWER_LLM` and `REFLECT_LLM`. Add:
 
@@ -860,35 +860,35 @@ LLM_CONFIG_PATH=llm.yaml
 
 Keep SiliconFlow key/base URL and embedding settings.
 
-- [ ] **Step 2: Update Kubernetes examples without deploying**
+- [x] **Step 2: Update Kubernetes examples without deploying**
 
 In `jarvis.yaml`, replace chat model env entries with
 `LLM_CONFIG_PATH: "llm.yaml"`, add `DEEPSEEK_BASE_URL`, and add a
 `DEEPSEEK_API_KEY: "REPLACE_ME"` Secret entry. Keep SiliconFlow embedding
 configuration unchanged. Do not run `kubectl` or build an image.
 
-- [ ] **Step 3: Update README**
+- [x] **Step 3: Update README**
 
 Document profiles, provider YAML, direct DeepSeek defaults, override fallback,
 API key variables, the unchanged SiliconFlow embedding path, and the rule that
 known-protocol providers are configuration-only. Replace statements that Agent
 dispatch directly uses `REFLECT_LLM` with the `agent_dispatch` profile.
 
-- [ ] **Step 4: Preserve and mark the legacy router**
+- [x] **Step 4: Preserve and mark the legacy router**
 
 Keep `router.get_model()` import-compatible for external callers, add a
 deprecation docstring, and ensure production source tests prove it is unused.
 Do not extend its hardcoded registry; all new production behavior belongs to
 the gateway.
 
-- [ ] **Step 5: Update `.codex` memory**
+- [x] **Step 5: Update `.codex` memory**
 
 Rewrite the LLM Layer section of `.codex/PROJECT_CONTEXT.md` to describe the
 gateway, profiles, adapters, DeepSeek reasoning replay, and unchanged
 SiliconFlow embeddings. Mark this plan complete in `.codex/NEXT_STEPS.md` and
 record verification results after Task 7.
 
-- [ ] **Step 6: Add persistence and embedding protection tests**
+- [x] **Step 6: Add persistence and embedding protection tests**
 
 `tests/unit/test_memory_persistence.py` must prove that `memory_write()` sends
 only human and final non-tool assistant text to PostgreSQL, sends long tool
@@ -900,7 +900,7 @@ result content to Qdrant as plain text, and never passes `reasoning_content`,
 that a `siliconflow/...` `EMBED_MODEL` uses `SILICONFLOW_API_KEY`,
 `SILICONFLOW_BASE_URL`, and the model ID after the first slash.
 
-- [ ] **Step 7: Verify configuration and references**
+- [x] **Step 7: Verify configuration and references**
 
 ```bash
 .venv/bin/python -c "import yaml; yaml.safe_load(open('llm.yaml')); list(yaml.safe_load_all(open('jarvis.yaml'))); print('yaml ok')"
@@ -914,7 +914,7 @@ Expected: `yaml ok`; obsolete chat defaults absent; `get_model` appears only in
 the deprecated router, legacy router tests, or an explicit no-production-import
 test; tests pass; no whitespace errors.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git status --short

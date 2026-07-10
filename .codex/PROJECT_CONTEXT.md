@@ -7,7 +7,8 @@ It combines:
 
 - HTTP API via FastAPI.
 - gRPC API via protobuf stubs.
-- LLM provider routing for SiliconFlow, OpenAI, and Claude.
+- A configuration-driven LLM Profile Gateway with direct DeepSeek defaults and
+  optional OpenAI, Claude, and SiliconFlow Chat overrides.
 - Tool calling through a decorator-based registry.
 - Conversation memory in PostgreSQL.
 - Knowledge/RAG memory in Qdrant.
@@ -22,10 +23,12 @@ It combines:
 - `jarvis/api/http/routes.py`
   - Defines `/chat`, `/ingest`, `/memory/{uid}`, and `DELETE /memory/{uid}`.
   - Builds `AgentState` and invokes `graph.invoke`.
-  - Maps provider errors to HTTP 400 and 502.
+  - Maps normalized LLM errors to HTTP 400/429/500/502/503/504 with redacted
+    public messages.
 - `jarvis/api/grpc/servicer.py`
   - Mirrors the HTTP behavior through `JarvisService`.
-  - Maps provider errors to gRPC `INVALID_ARGUMENT` and `UNAVAILABLE`.
+  - Maps normalized LLM errors to the corresponding gRPC argument,
+    precondition, resource, deadline, availability, and internal statuses.
 
 ## Agent State
 
@@ -69,7 +72,8 @@ Thresholds come from:
   - Degrades to empty history if PostgreSQL is unavailable.
 - `agent_dispatch`
   - Loads custom agents from `AGENTS_DIR`, default `.agents/skills`.
-  - Scores each agent with `REFLECT_LLM` or request `reflect_llm_override`.
+  - Scores each agent with the `agent_dispatch` LLM Profile or request
+    `reflect_llm_override`.
   - Activates the highest-scoring agent if score is at least
     `AGENT_DISPATCH_THRESHOLD`, default `0.6`.
   - Degrades to no active agent on errors.
@@ -79,8 +83,8 @@ Thresholds come from:
 - `plan_and_call`
   - Builds a system prompt from the Jarvis base prompt, RAG context, and active
     agent instructions.
-  - Uses `ANSWER_LLM` or request `llm_override`.
-  - Binds all registered tools and invokes the model.
+  - Calls `llm.chat(profile="answer", ...)` with request `llm_override`.
+  - The Gateway binds all registered tools and invokes the model.
 - `reflect`
   - Extracts the last non-tool AI answer.
   - Asks the reflection model for a numeric score.
@@ -89,6 +93,8 @@ Thresholds come from:
   - Increments `retry_count`.
   - Sets `low_confidence` only when max retries are reached and score is below
     threshold.
+  - Calls `llm.chat(profile="reflection", ...)` with request
+    `reflect_llm_override`.
 - `memory_write`
   - Saves human messages and final non-tool AI answers to PostgreSQL.
   - Stores long `ToolMessage` content in Qdrant when length exceeds
@@ -97,19 +103,36 @@ Thresholds come from:
 
 ## LLM Layer
 
+- Root `llm.yaml`
+  - Defines providers, fixed adapter names, capabilities, message limits, and
+    behavior Profiles.
+  - `answer`: `deepseek/deepseek-v4-pro`, thinking high, tools enabled.
+  - `reflection` and `agent_dispatch`: `deepseek/deepseek-v4-flash`, thinking
+    and tools disabled.
+- `jarvis/llm/config.py`
+  - Strictly validates YAML with Pydantic and splits model specs on the first
+    slash.
+  - Loads structure without requiring keys for unused optional providers.
+- `jarvis/llm/gateway.py`
+  - Is the only production boundary for Profile resolution, capability
+    fallback, legal message-group trimming, tool binding, retries, invocation,
+    and safe error normalization.
+  - Explicitly disables thinking when the `answer` request override lacks that
+    capability; required tool support remains a hard constraint.
+  - SiliconFlow Chat is limited to 10 messages and is trimmed by complete
+    assistant/tool groups.
+- `jarvis/llm/adapters`
+  - Fixed registry: `deepseek`, `openai_compatible`, and `anthropic`.
+  - `JarvisChatDeepSeek` preserves
+    `AIMessage.additional_kwargs["reasoning_content"]` in later tool-loop
+    request payloads.
+  - Provider SDK retries are disabled; the Gateway owns bounded retries.
+- `jarvis/llm/errors.py`
+  - Defines stable, redacted errors for invalid input/config/context, rate
+    limits, timeouts, unavailability, and invalid responses.
 - `jarvis/llm/router.py`
-  - Parses model specs as `provider/model_id`.
-  - Providers: `siliconflow`, `openai`, `claude`.
-  - Raises `ProviderNotFoundError("provider not exist")` for unknown providers
-    or invalid specs.
-  - Wraps provider failures in
-    `ProviderUnavailableError("provider not working:<error>")`.
-- `jarvis/llm/siliconflow.py`
-  - Uses `ChatOpenAI` with `SILICONFLOW_BASE_URL`.
-- `jarvis/llm/openai.py`
-  - Uses `ChatOpenAI`.
-- `jarvis/llm/claude.py`
-  - Uses `ChatAnthropic`.
+  - Retains the old raw-model API only for external compatibility.
+  - Production graph and agent callers do not import it.
 
 ## Memory And RAG
 
@@ -118,12 +141,16 @@ Thresholds come from:
   - Table: `conversations(id, user_id, role, content, created_at)`.
   - Loads latest messages by descending timestamp, then reverses them into
     chronological order.
+  - Stores only user text and final assistant text, never typed tool/reasoning
+    transcripts.
 - `jarvis/memory/knowledge.py`
   - Collection name: `jarvis_knowledge`.
   - Uses `OpenAIEmbeddings`; SiliconFlow embeddings are supported by OpenAI
     compatible base URL.
   - Point IDs are deterministic SHA-256 hashes of `user_id`, source, and text.
   - Retrieval filters by `user_id` and joins payload texts with `---`.
+  - Long tool-result text may remain untyped RAG knowledge; it is never
+    reconstructed as provider tool messages.
 
 ## Tools
 
@@ -169,6 +196,10 @@ Thresholds come from:
   - Original Jarvis design.
 - `docs/superpowers/specs/2026-06-18-agent-dispatch-design.md`
   - Custom Agent dispatch design.
+- `docs/superpowers/specs/2026-07-10-configurable-llm-gateway-design.md`
+  - Approved configurable chat provider and direct DeepSeek design.
+- `docs/superpowers/plans/2026-07-10-configurable-llm-gateway.md`
+  - Reviewed implementation and verification plan.
 - `docs/superpowers/plans/2026-05-22-jarvis-implementation.md`
   - Original implementation plan.
 - `docs/study`
@@ -185,6 +216,13 @@ Thresholds come from:
 ## Tests
 
 - Unit:
+  - `tests/unit/test_llm_config.py`
+  - `tests/unit/test_llm_adapters.py`
+  - `tests/unit/test_llm_gateway.py`
+  - `tests/unit/test_llm_callers.py`
+  - `tests/unit/test_grpc_servicer.py`
+  - `tests/unit/test_memory_persistence.py`
+  - `tests/unit/test_embedding_config.py`
   - `tests/unit/test_llm_router.py`
   - `tests/unit/test_tool_registry.py`
   - `tests/unit/test_reflect_node.py`
@@ -204,11 +242,13 @@ Thresholds come from:
 - `Dockerfile`
   - Multi-stage Python 3.11 slim build.
   - Regenerates gRPC stubs and patches package-relative imports.
-- `jarvis.yaml`
+  - `jarvis.yaml`
   - Kubernetes manifests for namespace, ConfigMap, Secret, PostgreSQL,
     Qdrant, Jarvis deployment, and service.
   - ConfigMap includes Agent dispatch defaults: `AGENTS_DIR` and
     `AGENT_DISPATCH_THRESHOLD`.
+  - ConfigMap points to `llm.yaml` and the direct DeepSeek base URL; Secret has
+    a `DEEPSEEK_API_KEY` placeholder.
 
 ## Current Known Inconsistencies
 
@@ -216,5 +256,5 @@ Thresholds come from:
   by the user shows `ls | grep docs` returning `docs`. Treat `./docs` as the
   confirmed documentation/handoff directory; do not assume a separate `./docx`
   directory exists unless it appears in the filesystem.
-- README says integration tests use real Qdrant/PostgreSQL, but current tests
-  include significant mocking. Verify before relying on that statement.
+- The current integration tests mock substantial external storage behavior;
+  they are not proof of a live PostgreSQL/Qdrant deployment.

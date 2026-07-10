@@ -50,7 +50,9 @@ cp .env.example .env
 # 编辑 .env，填入 API Key
 ```
 
-至少需要填写 `SILICONFLOW_API_KEY`（主模型和 Embedding）。如启用搜索工具，还需填 `TAVILY_API_KEY`。
+默认运行至少需要填写 `DEEPSEEK_API_KEY`（全部对话能力）和
+`SILICONFLOW_API_KEY`（Embedding）。如启用搜索工具，还需填
+`TAVILY_API_KEY`。
 
 ### 4. 启动服务
 
@@ -69,13 +71,14 @@ curl -X POST http://localhost:8080/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "LangGraph 是什么？",
-    "user_id": "user_001",
-    "llm": "siliconflow/deepseek-ai/DeepSeek-V4-Pro",
-    "reflect_llm": "siliconflow/moonshotai/Kimi-K2.6"
+    "user_id": "user_001"
   }'
 ```
 
-`llm` 和 `reflect_llm` 可选，不填则使用环境变量默认值。
+`llm` 和 `reflect_llm` 可选，不填则使用 `llm.yaml` 中的 Profile。
+覆盖值仍使用 `provider/model_id` 格式，例如 `openai/gpt-4o`。回答
+Profile 覆盖到不支持 thinking 的模型时会按配置显式关闭 thinking，
+但覆盖模型仍必须支持工具调用。
 
 响应：
 
@@ -124,21 +127,33 @@ Proto 定义见 `jarvis/api/grpc/jarvis.proto`，服务名 `JarvisService`，提
 
 ## LLM 配置
 
-模型通过 `"provider/model_id"` 格式指定：
+对话模型由根目录 `llm.yaml` 配置。业务节点只引用 `answer`、
+`reflection`、`agent_dispatch` 三个 Profile，供应商与协议差异由
+LLM Gateway 和固定 Adapter 处理。
+
+请求级模型覆盖使用 `"provider/model_id"` 格式：
 
 | Provider | 示例 |
 |----------|------|
+| `deepseek` | `deepseek/deepseek-v4-pro` |
 | `siliconflow` | `siliconflow/deepseek-ai/DeepSeek-V4-Pro` |
 | `openai` | `openai/gpt-4o` |
-| `claude` | `claude/claude-opus-4-7` |
+| `claude` | `claude/claude-opus-4-1` |
 
-默认模型（可通过环境变量覆盖）：
+默认 Profile：
 
 | 用途 | 默认值 |
 |------|--------|
-| 主模型（生成回答） | `siliconflow/deepseek-ai/DeepSeek-V4-Pro` |
-| 评分模型（Reflection） | `siliconflow/moonshotai/Kimi-K2.6` |
+| `answer` | `deepseek/deepseek-v4-pro`，thinking high，启用工具 |
+| `reflection` | `deepseek/deepseek-v4-flash`，关闭 thinking 与工具 |
+| `agent_dispatch` | `deepseek/deepseek-v4-flash`，关闭 thinking 与工具 |
 | Embedding 模型 | `siliconflow/Qwen/Qwen3-Embedding-8B` |
+
+同一协议族的新供应商只需在 `llm.yaml` 中选择
+`openai_compatible` 或 `anthropic` Adapter。全新消息协议才需要新增一个
+Adapter，LangGraph 节点无需修改。SiliconFlow Chat 的 10 条消息限制由
+Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消息条数
+上限，而遵循上下文 Token 限制。
 
 ## 环境变量
 
@@ -146,13 +161,14 @@ Proto 定义见 `jarvis/api/grpc/jarvis.proto`，服务名 `JarvisService`，提
 |------|--------|------|
 | `HTTP_PORT` | `8080` | HTTP 监听端口 |
 | `GRPC_PORT` | `9090` | gRPC 监听端口 |
-| `SILICONFLOW_API_KEY` | — | SiliconFlow API Key（必填） |
+| `LLM_CONFIG_PATH` | `llm.yaml` | LLM Provider 与 Profile 配置文件 |
+| `DEEPSEEK_API_KEY` | — | DeepSeek API Key（默认对话必填） |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 接口地址 |
+| `SILICONFLOW_API_KEY` | — | SiliconFlow API Key（默认 Embedding 必填） |
 | `SILICONFLOW_BASE_URL` | `https://api.siliconflow.cn/v1` | SiliconFlow 接口地址 |
 | `OPENAI_API_KEY` | — | OpenAI API Key |
 | `ANTHROPIC_API_KEY` | — | Anthropic API Key |
 | `TAVILY_API_KEY` | — | Tavily 搜索 API Key |
-| `ANSWER_LLM` | `siliconflow/deepseek-ai/DeepSeek-V4-Pro` | 主模型 |
-| `REFLECT_LLM` | `siliconflow/moonshotai/Kimi-K2.6` | 评分模型 |
 | `EMBED_MODEL` | `siliconflow/Qwen/Qwen3-Embedding-8B` | Embedding 模型 |
 | `VECTOR_SIZE` | `4096` | 向量维度（与 Embedding 模型匹配） |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant 连接地址 |
@@ -232,7 +248,11 @@ description: 当用户问 X 类问题时激活此 Agent
 
 ### 评分与阈值
 
-`agent_dispatch` 调用 `REFLECT_LLM` 对每个 Agent 的 description 和用户 query 打分（0–1）。超过 `AGENT_DISPATCH_THRESHOLD`（默认 `0.6`）的最高分 Agent 被激活；全部低于阈值则不激活任何 Agent，走默认行为。
+`agent_dispatch` 使用同名 LLM Profile 对每个 Agent 的 description 和用户
+query 打分（0–1）。超过 `AGENT_DISPATCH_THRESHOLD`（默认 `0.6`）的最高分
+Agent 被激活；全部低于阈值则不激活任何 Agent，走默认行为。请求中的
+`reflect_llm` 会同时覆盖 Reflection 和 Agent dispatch 的目标模型，但各自
+仍保留 Profile 的关闭 thinking/工具策略。
 
 ## 降级策略
 
@@ -248,7 +268,9 @@ description: 当用户问 X 类问题时激活此 Agent
 pytest tests/ -v
 ```
 
-测试分三层：`tests/unit/`（mock LLM）、`tests/integration/`（真实 Qdrant/PostgreSQL）、`tests/e2e/`（FastAPI TestClient）。
+测试分三层：`tests/unit/`（配置、Adapter、Gateway 与节点单测）、
+`tests/integration/`（以 mock 隔离外部 LLM/存储的图与 RAG 流程）、
+`tests/e2e/`（FastAPI TestClient）。默认测试不会调用真实供应商 API。
 
 ## 目录结构
 
@@ -256,12 +278,12 @@ pytest tests/ -v
 jarvis/
 ├── config.py              # 环境变量与默认配置
 ├── main.py                # 服务入口（并行启动 HTTP + gRPC）
-├── llm/                   # LLM Provider 层
-│   ├── base.py            # BaseLLMProvider 抽象接口
-│   ├── siliconflow.py
-│   ├── openai.py
-│   ├── claude.py
-│   └── router.py          # "provider/model_id" 路由
+├── llm/                   # Profile Gateway 与协议 Adapter
+│   ├── config.py          # llm.yaml 类型化加载
+│   ├── gateway.py         # 统一 chat、能力、裁剪、重试与错误归一化
+│   ├── errors.py          # 安全的 LLM 异常层
+│   ├── adapters/          # DeepSeek / OpenAI-compatible / Anthropic
+│   └── router.py          # 仅保留旧 raw-model API 兼容
 ├── tools/
 │   ├── registry.py        # @register_tool 装饰器
 │   ├── search.py          # Tavily 搜索

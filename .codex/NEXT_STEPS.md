@@ -28,15 +28,15 @@ The snapshot above is historical. Always trust the current
 
 ## Active LLM Gateway Work
 
-Status on 2026-07-10: design and implementation plan passed final automated
-code review with no remaining Critical or Important findings. Local
-implementation is ready to execute without an additional human approval gate.
+Status on 2026-07-10: implementation Tasks 1-6 are complete locally. Focused
+configuration, Adapter, Gateway, caller, API, memory, and embedding tests pass.
+The full suite and final automated code review remain before completion.
 
 - Design spec:
   `docs/superpowers/specs/2026-07-10-configurable-llm-gateway-design.md`.
 - Implementation plan:
   `docs/superpowers/plans/2026-07-10-configurable-llm-gateway.md`.
-- All default chat profiles will use the direct DeepSeek API.
+- All default chat Profiles use the direct DeepSeek API.
 - `answer` uses `deepseek-v4-pro` with high-effort thinking and tools.
 - `reflection` and `agent_dispatch` use `deepseek-v4-flash` with thinking and
   tools disabled.
@@ -50,8 +50,8 @@ implementation is ready to execute without an additional human approval gate.
 - DeepSeek reasoning/tool messages are preserved only inside one graph
   execution. Persistent history continues to store final user/assistant text,
   so incomplete tool reasoning is never replayed across requests.
-- After the design file passes automated code review, write and review the
-  implementation plan, then execute it with tests.
+- Next action: run the full verification matrix, resolve automated code-review
+  findings, record exact totals, and create the final local commit.
 - Do not build an image or perform deployment actions without explicit user
   approval.
 
@@ -63,7 +63,9 @@ implementation is ready to execute without an additional human approval gate.
    - Treat `./docs` as the confirmed handoff/documentation directory. The
      earlier `./docx` mention was a path-name confusion corrected by the user's
      screenshot showing `ls | grep docs`.
-   - Current execution plan is
+   - Current feature execution plan is
+     `docs/superpowers/plans/2026-07-10-configurable-llm-gateway.md`.
+   - The broader operational plan remains
      `docs/superpowers/plans/2026-07-09-jarvis-current-state-next-steps.md`.
    - The original bootstrap plan
      `docs/superpowers/plans/2026-05-22-jarvis-implementation.md` is preserved
