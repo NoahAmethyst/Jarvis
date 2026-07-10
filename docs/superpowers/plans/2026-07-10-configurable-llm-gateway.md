@@ -16,6 +16,10 @@ stop receiving raw provider models.
 **Tech Stack:** Python 3.11+, Pydantic 2, PyYAML, LangChain 1.x,
 `langchain-deepseek>=1.1.0,<2.0.0`, LangGraph, FastAPI, gRPC, pytest.
 
+**Status:** Completed on 2026-07-10. Full suite: 114 passed, 1 existing
+Starlette/FastAPI deprecation warning. Final automated review: Code ready, no
+remaining Critical or Important findings.
+
 ## Global Constraints
 
 - Default `answer`: `deepseek/deepseek-v4-pro`, thinking enabled,
@@ -934,7 +938,7 @@ git commit -m "FEATURE
 **Interfaces:**
 - Produces: green test evidence and independent review approval.
 
-- [ ] **Step 1: Run focused LLM tests**
+- [x] **Step 1: Run focused LLM tests**
 
 ```bash
 .venv/bin/python -m pytest tests/unit/test_llm_config.py tests/unit/test_llm_adapters.py tests/unit/test_llm_gateway.py tests/unit/test_llm_callers.py -v
@@ -942,7 +946,7 @@ git commit -m "FEATURE
 
 Expected: all pass.
 
-- [ ] **Step 2: Run the full suite**
+- [x] **Step 2: Run the full suite**
 
 ```bash
 .venv/bin/python -m pytest tests/ -v
@@ -950,7 +954,7 @@ Expected: all pass.
 
 Expected: all pass; the known FastAPI/Starlette deprecation warning may remain.
 
-- [ ] **Step 3: Run static safety checks**
+- [x] **Step 3: Run static safety checks**
 
 ```bash
 .venv/bin/python -m compileall -q jarvis tests
@@ -962,7 +966,7 @@ rg -n "jarvis\.llm\.router|get_model" jarvis/agent jarvis/agents
 Expected: compile and diff checks succeed; obsolete defaults and production
 router imports return no matches.
 
-- [ ] **Step 4: Invoke an independent code-review Agent**
+- [x] **Step 4: Invoke an independent code-review Agent**
 
 Ask it to review the complete diff against
 `docs/superpowers/specs/2026-07-10-configurable-llm-gateway-design.md`, with
@@ -971,7 +975,7 @@ fallback, retries, legal tool groups, error redaction, docs, and tests. Resolve
 all Critical findings and all applicable Important findings, then re-run the
 affected tests.
 
-- [ ] **Step 5: Record verification and commit review fixes**
+- [x] **Step 5: Record verification and commit review fixes**
 
 Update `.codex/NEXT_STEPS.md` with exact test totals and reviewer outcome, then:
 

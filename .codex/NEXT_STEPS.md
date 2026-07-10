@@ -28,9 +28,9 @@ The snapshot above is historical. Always trust the current
 
 ## Active LLM Gateway Work
 
-Status on 2026-07-10: implementation Tasks 1-6 are complete locally. Focused
-configuration, Adapter, Gateway, caller, API, memory, and embedding tests pass.
-The full suite and final automated code review remain before completion.
+Status on 2026-07-10: implementation is complete locally and committed in
+task-scoped changes. Final automated code review reported `Code ready: Yes`
+with no remaining Critical or Important findings.
 
 - Design spec:
   `docs/superpowers/specs/2026-07-10-configurable-llm-gateway-design.md`.
@@ -50,8 +50,14 @@ The full suite and final automated code review remain before completion.
 - DeepSeek reasoning/tool messages are preserved only inside one graph
   execution. Persistent history continues to store final user/assistant text,
   so incomplete tool reasoning is never replayed across requests.
-- Next action: run the full verification matrix, resolve automated code-review
-  findings, record exact totals, and create the final local commit.
+- Verification evidence:
+  - focused LLM configuration/Adapter/Gateway/caller tests: 50 passed;
+  - final full suite after review fixes: 114 passed, 1 existing
+    Starlette/FastAPI TestClient deprecation warning;
+  - `compileall`, YAML parsing, `git diff --check`, obsolete chat-default scan,
+    and production legacy-router scan passed.
+- No Docker image, Docker Compose, Kubernetes, SSH, push, or remote deployment
+  action was executed.
 - Do not build an image or perform deployment actions without explicit user
   approval.
 

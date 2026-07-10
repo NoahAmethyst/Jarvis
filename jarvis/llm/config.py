@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from jarvis.config import LLM_CONFIG_PATH
-from jarvis.llm.errors import LLMInvalidRequestError
+from jarvis.llm.errors import LLMConfigurationError, LLMInvalidRequestError
 
 
 AdapterName = Literal["deepseek", "openai_compatible", "anthropic"]
@@ -14,6 +14,7 @@ ThinkingFallback = Literal["error", "disable"]
 ToolMode = Literal["enabled", "disabled"]
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "llm.yaml"
+REQUIRED_PROFILES = frozenset({"answer", "reflection", "agent_dispatch"})
 
 
 class StrictModel(BaseModel):
@@ -68,6 +69,9 @@ class LLMSettings(StrictModel):
 
     @model_validator(mode="after")
     def validate_profile_providers(self):
+        missing_profiles = REQUIRED_PROFILES.difference(self.profiles)
+        if missing_profiles:
+            raise ValueError("required LLM profiles are missing")
         for profile_name, profile in self.profiles.items():
             provider_name, _ = parse_model_spec(profile.model)
             if provider_name not in self.providers:
@@ -95,8 +99,17 @@ def _default_config_path() -> Path:
 
 def load_llm_config(path: str | Path | None = None) -> LLMSettings:
     config_path = Path(path) if path is not None else _default_config_path()
-    with config_path.open(encoding="utf-8") as file:
-        data = yaml.safe_load(file)
-    if not isinstance(data, dict):
-        raise ValueError("LLM configuration root must be a mapping")
-    return LLMSettings.model_validate(data)
+    try:
+        with config_path.open(encoding="utf-8") as file:
+            data = yaml.safe_load(file)
+        if not isinstance(data, dict):
+            raise ValueError("LLM configuration root must be a mapping")
+        return LLMSettings.model_validate(data)
+    except (
+        OSError,
+        ValueError,
+        ValidationError,
+        yaml.YAMLError,
+        LLMInvalidRequestError,
+    ) as error:
+        raise LLMConfigurationError("LLM configuration is invalid") from error

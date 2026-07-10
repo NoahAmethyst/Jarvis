@@ -70,6 +70,29 @@ def test_chat_maps_normalized_llm_errors(client, error, status_code):
     assert "sk-test" not in response.text
 
 
+def test_chat_missing_llm_config_maps_safe_configuration_error(
+    client, monkeypatch, tmp_path
+):
+    from jarvis.llm import get_llm
+
+    monkeypatch.setattr(
+        "jarvis.llm.config.LLM_CONFIG_PATH",
+        str(tmp_path / "secret-path" / "missing.yaml"),
+    )
+    get_llm.cache_clear()
+    try:
+        response = client.post(
+            "/chat",
+            json={"message": "hello", "user_id": "u1"},
+        )
+    finally:
+        get_llm.cache_clear()
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "LLM configuration is invalid"}
+    assert "secret-path" not in response.text
+
+
 def test_ingest_stores_knowledge(client):
     with patch("jarvis.api.http.routes.know_mem.store_knowledge") as mock_store:
         resp = client.post("/ingest", json={

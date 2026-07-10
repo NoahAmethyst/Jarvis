@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import grpc
 import pytest
+from langchain_core.messages import HumanMessage
 
 from jarvis.api.grpc import jarvis_pb2
 from jarvis.api.grpc.servicer import JarvisServicer
@@ -73,3 +74,32 @@ def test_grpc_chat_success_preserves_response_shape():
     assert response.answer == "hi"
     assert response.low_confidence is False
     assert context.code is None
+
+
+def test_grpc_missing_llm_config_maps_failed_precondition(monkeypatch, tmp_path):
+    from jarvis.llm import get_llm
+
+    monkeypatch.setattr(
+        "jarvis.llm.config.LLM_CONFIG_PATH",
+        str(tmp_path / "secret-path" / "missing.yaml"),
+    )
+    get_llm.cache_clear()
+    context = FakeContext()
+    request = jarvis_pb2.ChatRequest(message="hello", user_id="u1")
+
+    def invoke(_state):
+        get_llm().chat(
+            profile="answer",
+            messages=[HumanMessage(content="hello")],
+        )
+
+    try:
+        with patch("jarvis.api.grpc.servicer.graph.invoke", side_effect=invoke):
+            response = JarvisServicer().Chat(request, context)
+    finally:
+        get_llm.cache_clear()
+
+    assert response.answer == ""
+    assert context.code == grpc.StatusCode.FAILED_PRECONDITION
+    assert context.details == "LLM configuration is invalid"
+    assert "secret-path" not in context.details

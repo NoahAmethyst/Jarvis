@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from jarvis.llm.config import load_llm_config, parse_model_spec
-from jarvis.llm.errors import LLMInvalidRequestError
+from jarvis.llm.errors import LLMConfigurationError, LLMInvalidRequestError
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +27,17 @@ def _write_config(tmp_path: Path, adapter: str = "openai_compatible") -> Path:
                         "model": "test/model",
                         "tools": "enabled",
                         "thinking": {"mode": "disabled"},
-                    }
+                    },
+                    "reflection": {
+                        "model": "test/model",
+                        "tools": "disabled",
+                        "thinking": {"mode": "disabled"},
+                    },
+                    "agent_dispatch": {
+                        "model": "test/model",
+                        "tools": "disabled",
+                        "thinking": {"mode": "disabled"},
+                    },
                 },
             }
         ),
@@ -73,7 +83,7 @@ def test_invalid_model_spec_is_rejected(spec):
 def test_unknown_adapter_name_is_rejected(tmp_path):
     path = _write_config(tmp_path, adapter="some.module.Adapter")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(LLMConfigurationError, match="LLM configuration is invalid"):
         load_llm_config(path)
 
 
@@ -83,7 +93,7 @@ def test_profile_must_reference_configured_provider(tmp_path):
     data["profiles"]["answer"]["model"] = "missing/model"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="unknown provider"):
+    with pytest.raises(LLMConfigurationError, match="LLM configuration is invalid"):
         load_llm_config(path)
 
 
@@ -93,7 +103,47 @@ def test_enabled_thinking_requires_effort(tmp_path):
     data["profiles"]["answer"]["thinking"] = {"mode": "enabled"}
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="effort"):
+    with pytest.raises(LLMConfigurationError, match="LLM configuration is invalid"):
+        load_llm_config(path)
+
+
+def test_missing_required_profile_is_configuration_error(tmp_path):
+    path = _write_config(tmp_path)
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    del data["profiles"]["agent_dispatch"]
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(LLMConfigurationError, match="LLM configuration is invalid"):
+        load_llm_config(path)
+
+
+def test_missing_config_file_is_redacted(tmp_path):
+    path = tmp_path / "secret-path" / "missing.yaml"
+
+    with pytest.raises(LLMConfigurationError) as exc_info:
+        load_llm_config(path)
+
+    assert str(exc_info.value) == "LLM configuration is invalid"
+    assert "secret-path" not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+
+def test_invalid_yaml_is_redacted(tmp_path):
+    path = tmp_path / "llm.yaml"
+    path.write_text("providers: [invalid", encoding="utf-8")
+
+    with pytest.raises(LLMConfigurationError) as exc_info:
+        load_llm_config(path)
+
+    assert str(exc_info.value) == "LLM configuration is invalid"
+    assert "providers" not in str(exc_info.value)
+
+
+def test_non_mapping_root_is_configuration_error(tmp_path):
+    path = tmp_path / "llm.yaml"
+    path.write_text("- not\n- a\n- mapping\n", encoding="utf-8")
+
+    with pytest.raises(LLMConfigurationError, match="LLM configuration is invalid"):
         load_llm_config(path)
 
 
