@@ -16,15 +16,13 @@ def client():
 
 
 def test_chat_returns_answer(client):
-    mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    mock_llm.invoke.return_value = AIMessage(content="Paris is the capital of France.")
-
-    mock_reflect = MagicMock()
-    mock_reflect.invoke.return_value = MagicMock(content="0.95")
-
-    with patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm), \
-         patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_reflect):
+    with patch(
+        "jarvis.agent.nodes.plan_and_call.llm.chat",
+        side_effect=[
+            AIMessage(content="Paris is the capital of France."),
+            AIMessage(content="0.95"),
+        ],
+    ):
         resp = client.post("/chat", json={"message": "Capital of France?", "user_id": "u1"})
 
     assert resp.status_code == 200

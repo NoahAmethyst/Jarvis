@@ -5,19 +5,17 @@ from jarvis.agent.state import AgentState
 
 
 def _make_graph_with_mocks():
-    mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    mock_llm.invoke.return_value = AIMessage(content="The answer is 42.")
-
-    mock_reflect_llm = MagicMock()
-    mock_reflect_llm.invoke.return_value = MagicMock(content="0.9")
-
     patches = [
         patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]),
         patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]),
         patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""),
-        patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm),
-        patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_reflect_llm),
+        patch(
+            "jarvis.agent.nodes.plan_and_call.llm.chat",
+            side_effect=[
+                AIMessage(content="The answer is 42."),
+                AIMessage(content="0.9"),
+            ],
+        ),
         patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"),
         patch("jarvis.agent.nodes.memory_write.know_mem.store_knowledge"),
     ]
@@ -55,26 +53,19 @@ def test_graph_completes_single_turn():
 
 
 def test_graph_retries_on_low_score():
-    mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    # First call returns bad answer, second returns better
-    mock_llm.invoke.side_effect = [
-        AIMessage(content="I don't know."),
-        AIMessage(content="6 times 7 is 42."),
-    ]
-
-    mock_reflect_llm = MagicMock()
-    mock_reflect_llm.invoke.side_effect = [
-        MagicMock(content="0.2"),  # first: low score → retry
-        MagicMock(content="0.95"), # second: high score → done
-    ]
-
     patches = [
         patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]),
         patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]),
         patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""),
-        patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm),
-        patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_reflect_llm),
+        patch(
+            "jarvis.agent.nodes.plan_and_call.llm.chat",
+            side_effect=[
+                AIMessage(content="I don't know."),
+                AIMessage(content="0.2"),
+                AIMessage(content="6 times 7 is 42."),
+                AIMessage(content="0.95"),
+            ],
+        ),
         patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"),
         patch("jarvis.agent.nodes.memory_write.know_mem.store_knowledge"),
     ]

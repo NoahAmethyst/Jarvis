@@ -2,8 +2,8 @@ import re
 import logging
 from langchain_core.messages import HumanMessage, AIMessage
 from jarvis.agent.state import AgentState
-from jarvis.config import REFLECT_LLM, REFLECTION_SCORE_THRESHOLD, REFLECTION_MAX_RETRIES
-from jarvis.llm.router import get_model
+from jarvis.config import REFLECTION_SCORE_THRESHOLD, REFLECTION_MAX_RETRIES
+from jarvis.llm import llm
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,6 @@ def _extract_last_ai_answer(state: AgentState) -> str:
 
 def reflect(state: AgentState) -> dict:
     answer = _extract_last_ai_answer(state)
-    model_spec = state.get("reflect_llm_override") or REFLECT_LLM
-    llm = get_model(model_spec)
 
     prompt = (
         f"Rate this answer from 0.0 to 1.0 based on accuracy, completeness, "
@@ -27,7 +25,12 @@ def reflect(state: AgentState) -> dict:
         f"Answer: {answer}\n\n"
         f"Respond with ONLY a decimal number between 0.0 and 1.0."
     )
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = llm.chat(
+        profile="reflection",
+        messages=[HumanMessage(content=prompt)],
+        tools=None,
+        override=state.get("reflect_llm_override"),
+    )
 
     try:
         match = re.search(r"\d+\.?\d*", response.content)

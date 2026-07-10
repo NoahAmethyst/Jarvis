@@ -3,6 +3,7 @@ import os
 import pytest
 import tempfile
 from pathlib import Path
+from langchain_core.messages import AIMessage
 from jarvis.agents import AgentDefinition
 
 
@@ -144,7 +145,9 @@ def _make_agent(name="TestAgent", description="Handles test queries", instructio
 
 def test_dispatch_no_agents_returns_none():
     from jarvis.agents.dispatcher import dispatch_agent
-    agent, score = dispatch_agent("what is 2+2?", [], threshold=0.6, model_spec="siliconflow/test")
+    agent, score = dispatch_agent(
+        "what is 2+2?", [], threshold=0.6, model_override="siliconflow/test"
+    )
     assert agent is None
     assert score == 0.0
 
@@ -153,12 +156,14 @@ def test_dispatch_above_threshold_returns_agent():
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.9")
-
     agent = _make_agent()
-    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+    with patch(
+        "jarvis.agents.dispatcher.llm.chat",
+        return_value=AIMessage(content="0.9"),
+    ):
+        result, score = dispatch_agent(
+            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+        )
 
     assert result is agent
     assert score == pytest.approx(0.9)
@@ -168,12 +173,14 @@ def test_dispatch_below_threshold_returns_none():
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.3")
-
     agent = _make_agent()
-    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+    with patch(
+        "jarvis.agents.dispatcher.llm.chat",
+        return_value=AIMessage(content="0.3"),
+    ):
+        result, score = dispatch_agent(
+            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+        )
 
     assert result is None
     assert score == pytest.approx(0.3)
@@ -183,20 +190,22 @@ def test_dispatch_picks_highest_score():
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.side_effect = [
-        MagicMock(content="0.4"),
-        MagicMock(content="0.85"),
-        MagicMock(content="0.6"),
-    ]
-
     agents = [
         _make_agent("A", "Low match agent"),
         _make_agent("B", "High match agent"),
         _make_agent("C", "Medium match agent"),
     ]
-    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result, score = dispatch_agent("test query", agents, threshold=0.6, model_spec="siliconflow/test")
+    with patch(
+        "jarvis.agents.dispatcher.llm.chat",
+        side_effect=[
+            AIMessage(content="0.4"),
+            AIMessage(content="0.85"),
+            AIMessage(content="0.6"),
+        ],
+    ):
+        result, score = dispatch_agent(
+            "test query", agents, threshold=0.6, model_override="siliconflow/test"
+        )
 
     assert result is not None
     assert result.name == "B"
@@ -207,12 +216,14 @@ def test_dispatch_llm_failure_returns_none():
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.side_effect = Exception("LLM timeout")
-
     agent = _make_agent()
-    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+    with patch(
+        "jarvis.agents.dispatcher.llm.chat",
+        side_effect=Exception("LLM timeout"),
+    ):
+        result, score = dispatch_agent(
+            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+        )
 
     assert result is None
     assert score == 0.0
@@ -222,12 +233,14 @@ def test_dispatch_malformed_score_excluded():
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="I cannot score this.")
-
     agent = _make_agent()
-    with patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
-        result, score = dispatch_agent("test query", [agent], threshold=0.6, model_spec="siliconflow/test")
+    with patch(
+        "jarvis.agents.dispatcher.llm.chat",
+        return_value=AIMessage(content="I cannot score this."),
+    ):
+        result, score = dispatch_agent(
+            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+        )
 
     assert result is None
 
@@ -291,11 +304,11 @@ def test_agent_dispatch_node_injects_agent(tmp_path):
         "agent_dispatch_score": 0.0,
     }
 
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.9")
-
     with patch("jarvis.agent.nodes.agent_dispatch.AGENTS_DIR", str(tmp_path)), \
-         patch("jarvis.agents.dispatcher.get_model", return_value=mock_llm):
+         patch(
+             "jarvis.agents.dispatcher.llm.chat",
+             return_value=AIMessage(content="0.9"),
+         ):
         result = agent_dispatch(state)
 
     assert result["active_agent"] is not None
@@ -332,14 +345,13 @@ def test_plan_and_call_injects_active_agent_instructions():
         "agent_dispatch_score": 0.9,
     }
 
-    mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    mock_llm.invoke.return_value = AIMessage(content="Invoice processed.")
-
-    with patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.plan_and_call.llm.chat",
+        return_value=AIMessage(content="Invoice processed."),
+    ) as mock_chat:
         plan_and_call(state)
 
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_chat.call_args.kwargs["messages"]
     system_msg = call_args[0]
     assert isinstance(system_msg, SystemMessage)
     assert "You are a billing specialist." in system_msg.content
@@ -367,14 +379,13 @@ def test_plan_and_call_no_active_agent_uses_default_prompt():
         "agent_dispatch_score": 0.0,
     }
 
-    mock_llm = MagicMock()
-    mock_llm.bind_tools.return_value = mock_llm
-    mock_llm.invoke.return_value = AIMessage(content="Hello there.")
-
-    with patch("jarvis.agent.nodes.plan_and_call.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.plan_and_call.llm.chat",
+        return_value=AIMessage(content="Hello there."),
+    ) as mock_chat:
         plan_and_call(state)
 
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_chat.call_args.kwargs["messages"]
     system_msg = call_args[0]
     assert isinstance(system_msg, SystemMessage)
     assert "You are Jarvis" in system_msg.content

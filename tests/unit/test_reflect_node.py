@@ -25,10 +25,10 @@ def _base_state(**overrides) -> AgentState:
 
 
 def test_reflect_high_score_no_retry():
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.9")
-
-    with patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.reflect.llm.chat",
+        return_value=AIMessage(content="0.9"),
+    ):
         from jarvis.agent.nodes.reflect import reflect
         result = reflect(_base_state())
 
@@ -39,10 +39,10 @@ def test_reflect_high_score_no_retry():
 
 
 def test_reflect_low_score_sets_low_confidence_after_max_retries():
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.3")
-
-    with patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.reflect.llm.chat",
+        return_value=AIMessage(content="0.3"),
+    ):
         from jarvis.agent.nodes.reflect import reflect
         result = reflect(_base_state(retry_count=2))
 
@@ -51,10 +51,10 @@ def test_reflect_low_score_sets_low_confidence_after_max_retries():
 
 
 def test_reflect_low_score_below_max_retries_not_low_confidence():
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="0.3")
-
-    with patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.reflect.llm.chat",
+        return_value=AIMessage(content="0.3"),
+    ):
         from jarvis.agent.nodes.reflect import reflect
         result = reflect(_base_state(retry_count=0))
 
@@ -63,10 +63,10 @@ def test_reflect_low_score_below_max_retries_not_low_confidence():
 
 
 def test_reflect_malformed_score_defaults_to_half():
-    mock_llm = MagicMock()
-    mock_llm.invoke.return_value = MagicMock(content="I cannot score this.")
-
-    with patch("jarvis.agent.nodes.reflect.get_model", return_value=mock_llm):
+    with patch(
+        "jarvis.agent.nodes.reflect.llm.chat",
+        return_value=AIMessage(content="I cannot score this."),
+    ):
         from jarvis.agent.nodes.reflect import reflect
         result = reflect(_base_state())
 

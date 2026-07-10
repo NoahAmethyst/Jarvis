@@ -2,7 +2,7 @@ import re
 import logging
 from langchain_core.messages import HumanMessage
 from jarvis.agents import AgentDefinition
-from jarvis.llm.router import get_model
+from jarvis.llm import llm
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +14,18 @@ _SCORE_PROMPT = (
 )
 
 
-def _score_agent(query: str, agent: AgentDefinition, llm) -> float:
+def _score_agent(
+    query: str,
+    agent: AgentDefinition,
+    model_override: str | None,
+) -> float:
     prompt = _SCORE_PROMPT.format(query=query, description=agent.description)
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = llm.chat(
+        profile="agent_dispatch",
+        messages=[HumanMessage(content=prompt)],
+        tools=None,
+        override=model_override,
+    )
     match = re.search(r"\d+\.?\d*", response.content)
     if not match:
         return 0.0
@@ -27,17 +36,16 @@ def dispatch_agent(
     query: str,
     agents: list[AgentDefinition],
     threshold: float,
-    model_spec: str,
+    model_override: str | None = None,
 ) -> tuple[AgentDefinition | None, float]:
     """Return (selected_agent, best_score). selected_agent is None if below threshold or on error."""
     if not agents:
         return None, 0.0
     try:
-        llm = get_model(model_spec)
         scored = []
         for agent in agents:
             try:
-                score = _score_agent(query, agent, llm)
+                score = _score_agent(query, agent, model_override)
                 scored.append((score, agent))
             except Exception as e:
                 logger.warning("Failed to score agent %s: %s", agent.name, e)
