@@ -3,10 +3,26 @@ name: Docker Image CI
 on:
   push:
     branches: [ "master" ]
-    paths-ignore:
-      - 'README.md'
+    paths:
+      - "jarvis/**"
+      - ".agents/skills/**/SKILL.md"
+      - ".agents/skills/**/agent.json"
+      - ".agents/skills/**/agent.yaml"
+      - ".agents/skills/**/agents/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "llm.yaml"
   pull_request:
     branches: [ "master" ]
+    paths:
+      - "jarvis/**"
+      - ".agents/skills/**/SKILL.md"
+      - ".agents/skills/**/agent.json"
+      - ".agents/skills/**/agent.yaml"
+      - ".agents/skills/**/agents/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "llm.yaml"
 
 jobs:
   build:

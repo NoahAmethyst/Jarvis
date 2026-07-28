@@ -266,6 +266,15 @@ Thresholds come from:
 
 ## Deployment
 
+- `.github/workflows/docker.yml`
+  - Builds pull requests and builds/pushes the `latest` image on `master` only
+    when application source, runtime Agent definitions, the root Dockerfile,
+    Python dependency metadata, or `llm.yaml` changes.
+  - Documentation, tests, study materials, Kubernetes manifests, and workflow
+    files do not automatically trigger an image build.
+- `.github/workflows/update_pod.yml`
+  - Deletes the Jarvis Pod only after a successful `master` run of the Docker
+    image workflow.
 - `docker-compose.yml`
   - Runs PostgreSQL and Qdrant locally.
 - `Dockerfile`
