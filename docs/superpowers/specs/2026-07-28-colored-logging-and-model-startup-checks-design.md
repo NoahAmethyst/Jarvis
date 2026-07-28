@@ -39,6 +39,11 @@ The embedding check will parse `EMBED_MODEL` independently because embedding
 configuration is not part of the chat profile gateway. The current default is
 `siliconflow/Qwen/Qwen3-Embedding-8B`.
 
+Embedding provider names are fail-closed. Only the explicitly supported
+`siliconflow` and `openai` providers may produce a request; an unknown or
+malformed provider is logged as a configuration failure without constructing a
+client or transmitting a credential.
+
 ## Connectivity Checks
 
 Each active chat provider will receive one minimal real chat request using the
@@ -47,6 +52,9 @@ the check. The active embedding model will receive one short `embed_query`
 request. Real inference is used because configuration inspection or a model
 listing endpoint cannot prove that the configured credential may invoke the
 specific model.
+
+Every diagnostic request will use a 10-second provider-client timeout with SDK
+retries disabled. This bounds the startup delay when a provider is unreachable.
 
 A successful check will log an `INFO` containing only the provider and model.
 A failure will log an `ERROR` containing the provider, model, and a safe failure

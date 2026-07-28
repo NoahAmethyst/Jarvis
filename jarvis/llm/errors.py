@@ -10,6 +10,10 @@ class LLMConfigurationError(LLMError):
     pass
 
 
+class LLMCredentialError(LLMConfigurationError):
+    pass
+
+
 class LLMContextLimitError(LLMInvalidRequestError):
     pass
 

@@ -8,6 +8,7 @@ from jarvis.config import (
     QDRANT_URL, EMBED_MODEL, VECTOR_SIZE,
     SILICONFLOW_API_KEY, SILICONFLOW_BASE_URL,
 )
+from jarvis.llm.errors import LLMConfigurationError, LLMCredentialError
 
 logger = logging.getLogger(__name__)
 COLLECTION_NAME = "jarvis_knowledge"
@@ -17,25 +18,38 @@ def _parse_embed_model(model_spec: str) -> tuple[str, str, str]:
     """Return (provider, model_id, base_url) from 'provider/model_id' spec."""
     parts = model_spec.split("/", 1)
     if len(parts) != 2:
-        return ("siliconflow", model_spec, SILICONFLOW_BASE_URL)
-    provider, model_id = parts
+        raise LLMConfigurationError("embedding model configuration is invalid")
+    provider, model_id = (part.strip() for part in parts)
+    if not provider or not model_id:
+        raise LLMConfigurationError("embedding model configuration is invalid")
     if provider == "siliconflow":
         return (provider, model_id, SILICONFLOW_BASE_URL)
-    return (provider, model_id, "")
+    if provider == "openai":
+        return (provider, model_id, "")
+    raise LLMConfigurationError("embedding model configuration is invalid")
 
 
-def _get_embeddings() -> OpenAIEmbeddings:
+def _get_embeddings(
+    model_spec: str | None = None,
+    request_timeout: float | None = None,
+    max_retries: int | None = None,
+) -> OpenAIEmbeddings:
     from jarvis.config import OPENAI_API_KEY
-    provider, model_id, base_url = _parse_embed_model(EMBED_MODEL)
+    selected_model = EMBED_MODEL if model_spec is None else model_spec
+    provider, model_id, base_url = _parse_embed_model(selected_model)
     if provider == "siliconflow":
         api_key = SILICONFLOW_API_KEY
-    elif provider == "openai":
-        api_key = OPENAI_API_KEY
     else:
-        api_key = SILICONFLOW_API_KEY  # fallback to siliconflow for unknown providers
+        api_key = OPENAI_API_KEY
+    if not api_key:
+        raise LLMCredentialError("embedding provider credential is missing")
     kwargs: dict = dict(model=model_id, api_key=api_key)
     if base_url:
         kwargs["base_url"] = base_url
+    if request_timeout is not None:
+        kwargs["request_timeout"] = request_timeout
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
     return OpenAIEmbeddings(**kwargs)
 
 

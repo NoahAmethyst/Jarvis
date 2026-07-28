@@ -143,10 +143,12 @@ def test_deepseek_adapter_maps_disabled_thinking(monkeypatch):
         provider=provider,
         model_id="deepseek-v4-flash",
         thinking=ThinkingSettings(mode="disabled"),
+        request_timeout=10.0,
     )
 
     assert model.reasoning_effort is None
     assert model.extra_body == {"thinking": {"type": "disabled"}}
+    assert model.request_timeout == 10.0
 
 
 def test_deepseek_payload_replays_reasoning_content(monkeypatch):
@@ -211,10 +213,12 @@ def test_openai_compatible_adapter_uses_env_base_url_override(monkeypatch):
             provider=provider,
             model_id="model-a",
             thinking=ThinkingSettings(mode="disabled"),
+            request_timeout=10.0,
         )
 
     assert model_class.call_args.kwargs["base_url"] == "https://override.example/v1"
     assert model_class.call_args.kwargs["max_retries"] == 0
+    assert model_class.call_args.kwargs["request_timeout"] == 10.0
 
 
 def test_openai_compatible_adapter_falls_back_to_literal_base_url(monkeypatch):
@@ -250,12 +254,14 @@ def test_anthropic_adapter_constructs_without_protocol_leak(monkeypatch):
             provider=provider,
             model_id="claude-opus-4-1",
             thinking=ThinkingSettings(mode="disabled"),
+            request_timeout=10.0,
         )
 
     assert model_class.call_args.kwargs == {
         "model_name": "claude-opus-4-1",
         "api_key": "test-key",
         "max_retries": 0,
+        "default_request_timeout": 10.0,
     }
 
 

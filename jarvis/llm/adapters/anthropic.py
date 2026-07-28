@@ -13,12 +13,15 @@ class AnthropicAdapter(BaseAdapter):
         provider: ProviderSettings,
         model_id: str,
         thinking: ThinkingSettings,
+        request_timeout: float | None = None,
     ) -> BaseChatModel:
         kwargs: dict[str, Any] = {
             "model_name": model_id,
             "api_key": self.resolve_api_key(provider),
             "max_retries": 0,
         }
+        if request_timeout is not None:
+            kwargs["default_request_timeout"] = request_timeout
         base_url = self.resolve_base_url(provider)
         if base_url:
             kwargs["base_url"] = base_url

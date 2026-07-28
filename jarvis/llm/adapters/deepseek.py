@@ -35,6 +35,7 @@ class DeepSeekAdapter(BaseAdapter):
         provider: ProviderSettings,
         model_id: str,
         thinking: ThinkingSettings,
+        request_timeout: float | None = None,
     ) -> BaseChatModel:
         kwargs: dict[str, Any] = {
             "model": model_id,
@@ -43,6 +44,8 @@ class DeepSeekAdapter(BaseAdapter):
             "max_retries": 0,
             "extra_body": {"thinking": {"type": thinking.mode}},
         }
+        if request_timeout is not None:
+            kwargs["request_timeout"] = request_timeout
         if thinking.mode == "enabled":
             kwargs["reasoning_effort"] = thinking.effort
         return JarvisChatDeepSeek(**kwargs)
