@@ -60,9 +60,19 @@ cp .env.example .env
 python jarvis/main.py
 ```
 
-HTTP 服务监听 `:8080`，gRPC 服务监听 `:9090`。
+进程会在绑定端口前，对每个活跃 Chat Provider 执行一次真实模型请求，并对
+Embedding 执行一次真实请求。探测会产生少量 API 用量并可能延迟端口监听；
+失败只记录脱敏日志，不阻止后续启动。随后初始化 PostgreSQL 和 Qdrant，任一
+存储初始化失败都会阻止服务监听。
+
+HTTP 服务默认监听 `0.0.0.0:8080`，gRPC 使用明文监听 `[::]:9090`，并非只
+绑定 localhost。当前应用没有鉴权或 TLS；启动前应通过防火墙、私网或可信
+反向代理隔离访问。
 
 ## HTTP API
+
+完整的 HTTP/gRPC 接入契约、错误码、客户端示例和 Codex 接入检查清单见
+[`API.md`](API.md)。
 
 ### POST /chat
 
@@ -105,7 +115,7 @@ curl -X POST http://localhost:8080/ingest \
   }'
 ```
 
-### GET /memory/{user_id}
+### GET /memory/{uid}
 
 查看用户对话历史：
 
@@ -113,9 +123,11 @@ curl -X POST http://localhost:8080/ingest \
 curl http://localhost:8080/memory/user_001
 ```
 
-### DELETE /memory/{user_id}
+### DELETE /memory/{uid}
 
-清除用户记忆：
+仅清除用户在 PostgreSQL 中的对话历史，不会删除通过 `/ingest` 或工具结果写入
+Qdrant 的知识；不能作为“删除用户全部数据”的接口。完整删除范围见
+[`API.md`](API.md#36-delete-memoryuid)。
 
 ```bash
 curl -X DELETE http://localhost:8080/memory/user_001
@@ -180,6 +192,12 @@ Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消�
 | `AGENT_DISPATCH_THRESHOLD` | `0.6` | Agent 匹配评分阈值，低于此值不激活 |
 
 ## 扩展工具
+
+> **安全提示：** 默认 `web_scrape` 当前没有 SSRF 防护。面向不可信用户或
+> 公网开放前，必须先禁用该工具，或实现 URL/DNS/重定向校验并通过网络层限制
+> egress，同时限制响应字节、解压大小、Content-Type、总时间、重定向和并发。
+> 当前没有单工具禁用开关；关闭 `answer.tools` 会关闭全部工具。完整接入安全
+> 边界见 [`API.md`](API.md)。
 
 新增工具只需在 `jarvis/tools/` 下创建文件并使用 `@register_tool` 装饰器：
 
@@ -256,10 +274,13 @@ Agent 被激活；全部低于阈值则不激活任何 Agent，走默认行为�
 
 ## 降级策略
 
+PostgreSQL 和 Qdrant 在进程启动初始化阶段都是硬依赖；任一初始化失败时，
+HTTP/gRPC 服务不会开始监听。下表描述的是服务已经成功启动后的单次请求降级：
+
 | 组件不可用 | 降级行为 |
 |-----------|---------|
 | Qdrant | 跳过 RAG，纯对话继续 |
-| PostgreSQL | 内存临时存储当前会话，会话结束丢弃 |
+| PostgreSQL | 跳过历史加载和持久化；本次请求可继续，但本轮消息不会跨请求保留 |
 | 工具执行失败 | 异常写入状态，LLM 基于失败信息重规划 |
 
 ## 运行测试
@@ -277,7 +298,9 @@ pytest tests/ -v
 ```
 jarvis/
 ├── config.py              # 环境变量与默认配置
+├── logging_config.py      # 进程日志格式与第三方日志级别
 ├── main.py                # 服务入口（并行启动 HTTP + gRPC）
+├── startup_checks.py      # 启动前 Chat Provider 与 Embedding 真实探测
 ├── llm/                   # Profile Gateway 与协议 Adapter
 │   ├── config.py          # llm.yaml 类型化加载
 │   ├── gateway.py         # 统一 chat、能力、裁剪、重试与错误归一化

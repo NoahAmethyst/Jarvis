@@ -18,8 +18,15 @@ It combines:
 ## Runtime Entry Points
 
 - `jarvis/main.py`
+  - Configures process logging.
+  - Runs real Chat Provider and Embedding startup probes before storage
+    initialization and port binding. Probe failures are logged and do not
+    block later startup, but calls consume provider quota and can delay
+    readiness.
   - Calls `init_db()` and `init_collection()`.
   - Starts gRPC and HTTP concurrently with `asyncio.gather`.
+  - Initializes PostgreSQL and Qdrant before binding either port, so both are
+    hard startup dependencies even though request-time failures can degrade.
 - `jarvis/api/http/routes.py`
   - Defines `/chat`, `/ingest`, `/memory/{uid}`, and `DELETE /memory/{uid}`.
   - Builds `AgentState` and invokes `graph.invoke`.
@@ -96,7 +103,10 @@ Thresholds come from:
   - Calls `llm.chat(profile="reflection", ...)` with request
     `reflect_llm_override`.
 - `memory_write`
-  - Saves human messages and final non-tool AI answers to PostgreSQL.
+  - Saves human messages and every non-tool AI answer to PostgreSQL, including
+    drafts rejected by reflection before a later final answer.
+  - Saves each message in its own transaction, so a storage failure can leave
+    a partially persisted turn.
   - Stores long `ToolMessage` content in Qdrant when length exceeds
     `KNOWLEDGE_MIN_LENGTH`, default `200`.
   - Logs and continues on storage failures.
@@ -141,13 +151,16 @@ Thresholds come from:
   - Table: `conversations(id, user_id, role, content, created_at)`.
   - Loads latest messages by descending timestamp, then reverses them into
     chronological order.
-  - Stores only user text and final assistant text, never typed tool/reasoning
-    transcripts.
+  - Stores user text and all non-tool AI answers, including reflection drafts,
+    but never typed tool/reasoning transcripts.
 - `jarvis/memory/knowledge.py`
   - Collection name: `jarvis_knowledge`.
   - Uses `OpenAIEmbeddings`; SiliconFlow embeddings are supported by OpenAI
     compatible base URL.
-  - Point IDs are deterministic SHA-256 hashes of `user_id`, source, and text.
+  - Point IDs hash an unescaped colon-joined `user_id`, source, and text value,
+    then truncate it to 63 bits. Different field tuples can collide at
+    delimiters (or by hash truncation), and Qdrant upsert will overwrite that
+    Point, so the ID is not a cross-user data-integrity boundary.
   - Retrieval filters by `user_id` and joins payload texts with `---`.
   - Long tool-result text may remain untyped RAG knowledge; it is never
     reconstructed as provider tool messages.
@@ -165,6 +178,14 @@ Thresholds come from:
   - Registers `web_scrape`.
   - Fetches a URL with `requests`, strips common page chrome with BeautifulSoup,
     and returns the first 5000 chars.
+  - Does not validate schemes, resolved IPs, private/link-local destinations,
+    cloud metadata addresses, redirects, or DNS rebinding. This is an SSRF
+    production blocker for untrusted/public traffic until the tool is disabled
+    or hardened and network egress is constrained.
+  - Downloads and parses the full response before truncating extracted text;
+    there is no streaming byte/decompression cap, Content-Type allowlist, total
+    deadline, redirect cap, scrape concurrency limit, or single-tool disable
+    switch.
 - Important: `jarvis/agent/graph.py` imports `jarvis.tools.search` and
   `jarvis.tools.scraper` only for registration side effects.
 
@@ -189,6 +210,11 @@ Thresholds come from:
 
 ## Documentation And Learning Materials
 
+- `API.md`
+  - Canonical integration guide for HTTP and gRPC consumers.
+  - Records current request/response contracts, error mappings, security and
+    data-isolation constraints, client examples, and a Codex-oriented
+    integration checklist.
 - `README.md`
   - Public architecture, setup, API, config, tool extension, custom Agent
     docs, degradation behavior, and test command.
@@ -216,6 +242,9 @@ Thresholds come from:
 ## Tests
 
 - Unit:
+  - `tests/unit/test_logging_config.py`
+  - `tests/unit/test_main.py`
+  - `tests/unit/test_startup_checks.py`
   - `tests/unit/test_llm_config.py`
   - `tests/unit/test_llm_adapters.py`
   - `tests/unit/test_llm_gateway.py`
@@ -242,13 +271,19 @@ Thresholds come from:
 - `Dockerfile`
   - Multi-stage Python 3.11 slim build.
   - Regenerates gRPC stubs and patches package-relative imports.
-  - `jarvis.yaml`
-  - Kubernetes manifests for namespace, ConfigMap, Secret, PostgreSQL,
-    Qdrant, Jarvis deployment, and service.
+- `jarvis.yaml`
+  - Contains only Namespace, ConfigMap, Jarvis Deployment, and NodePort Service
+    resources.
+  - Does not create PostgreSQL, Qdrant, or `jarvis-secrets`. PostgreSQL and the
+    shared Qdrant service must already be reachable, and the secret-bearing
+    `jarvis-secrets` resource must be provisioned out of band.
   - ConfigMap includes Agent dispatch defaults: `AGENTS_DIR` and
     `AGENT_DISPATCH_THRESHOLD`.
-  - ConfigMap points to `llm.yaml` and the direct DeepSeek base URL; Secret has
-    a `DEEPSEEK_API_KEY` placeholder.
+  - ConfigMap points to `llm.yaml`, the direct DeepSeek base URL, and the shared
+    Qdrant service.
+  - Service type is NodePort. The application itself binds HTTP to
+    `0.0.0.0:8080` and plaintext gRPC to `[::]:9090`; network isolation is
+    required because the application has no authentication or TLS.
 
 ## Current Known Inconsistencies
 

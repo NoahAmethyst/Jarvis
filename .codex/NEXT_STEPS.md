@@ -48,8 +48,9 @@ with no remaining Critical or Important findings.
   provider override compatibility without changing DeepSeek defaults.
 - Provider additions within a known protocol family are configuration-only.
 - DeepSeek reasoning/tool messages are preserved only inside one graph
-  execution. Persistent history continues to store final user/assistant text,
-  so incomplete tool reasoning is never replayed across requests.
+  execution. Persistent history stores human text and every non-tool AI answer,
+  including reflection drafts; typed tool/reasoning transcripts are not
+  replayed across requests.
 - Verification evidence:
   - focused LLM configuration/Adapter/Gateway/caller tests: 50 passed;
   - final full suite after review fixes: 114 passed, 1 existing
@@ -103,7 +104,30 @@ with no remaining Critical or Important findings.
 6. Clarify Memory/RAG persistence behavior. Status: pending.
    - Current automatic knowledge writing stores any long `ToolMessage`, not
      only web search/scrape results.
+   - Reflection drafts are currently stored as ordinary `ai` history records,
+     so one chat turn can produce consecutive AI entries and partial writes.
    - If source-specific behavior is required, tests should cover it.
+7. Harden the public integration boundary documented in `API.md`. Status:
+   pending.
+   - Production blocker: disable `web_scrape` for untrusted traffic or add
+     scheme, IPv4/IPv6, redirect, DNS rebinding, private/link-local, and cloud
+     metadata SSRF protections plus an egress allowlist/proxy. Also add
+     streaming byte/decompression caps, a Content-Type allowlist, total
+     deadline, redirect cap, and scrape concurrency limit.
+   - Add a per-tool server allowlist/disable mechanism; the current Profile
+     switch disables all tools together.
+   - Add authentication and server-derived `user_id` ownership checks.
+   - Enforce field length, HTTP body, frequency, and concurrency limits at the
+     service or trusted gateway before public exposure.
+   - Add typed OpenAPI response/error models for ingest and memory routes.
+   - Redact non-LLM HTTP/gRPC errors and map unexpected gRPC Chat exceptions.
+   - Decide on Chat idempotency before recommending automatic retries.
+   - Add knowledge deletion, health checks, Memory pagination, and explicit
+     HTTP/gRPC request and response size limits.
+   - Replace delimiter-based knowledge Point IDs with canonical structured or
+     length-prefixed hashing and cover cross-field collision cases.
+   - Add a startup-probe disable switch and explicit probe timeout if
+     operational environments cannot tolerate quota use or readiness delay.
 
 ## Likely Useful Test Commands
 
