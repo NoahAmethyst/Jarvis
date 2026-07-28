@@ -3,14 +3,17 @@
 ## Objective
 
 Add repository-level operating rules for releasing Jarvis without committing
-Kubernetes manifests or secrets to Git.
+secret-bearing Kubernetes manifests or credentials to Git.
 
 ## Scope
 
 - Create a root-level `AGENTS.md` containing deployment and release rules.
-- Do not modify `.github/workflows/docker.yml` or
-  `.github/workflows/update_pod.yml`.
-- Keep `jarvis.yaml` ignored by Git.
+- Validate `.github/workflows/docker.yml` and
+  `.github/workflows/update_pod.yml`, applying only the event guards required
+  to make pull-request builds safe and gate Pod updates on successful
+  `master` builds.
+- Permit sanitized `jarvis.yaml` and `llm.yaml` files containing only empty
+  values, placeholders, or environment-variable references.
 - Do not change application code, Kubernetes manifests, or the remote server as
   part of adding the rules.
 
@@ -34,8 +37,14 @@ Kubernetes manifests or secrets to Git.
 - The service runs on `1.15.231.125` under the `root` account.
 - Remote project files live under `/root/jarvis`.
 - Kubernetes is the only supported service deployment mechanism.
-- Kubernetes YAML files remain local and untracked. When a manifest changes,
-  the agent may securely synchronize only that manifest to `/root/jarvis`.
+- Sanitized Kubernetes YAML files may be tracked. A version containing real
+  credentials must use an ignored `*.local.yaml` or `*.secret.yaml` filename
+  and must never enter Git history.
+- Before staging YAML, agents must inspect the staged diff and scan the commits
+  that will be pushed for secrets without printing secret values.
+- When a manifest changes, the agent may securely synchronize only that
+  manifest to `/root/jarvis`. A secret-bearing local manifest may be copied to
+  the required remote filename while remaining untracked locally.
 - Synchronizing a manifest does not authorize `kubectl apply`, Pod deletion,
   service restarts, or other remote mutations unless the user explicitly
   requests them.
@@ -56,8 +65,9 @@ Kubernetes manifests or secrets to Git.
 
 - A root-level `AGENTS.md` records the workflow above without containing any
   secret value.
-- Existing GitHub Actions files remain unchanged.
-- `jarvis.yaml` remains ignored.
-- No Kubernetes YAML is added to Git.
+- GitHub Actions pass static validation, pull requests do not publish images,
+  and Pod updates run only after a successful `master` image build.
+- Sanitized `jarvis.yaml` and `llm.yaml` may remain tracked.
+- Secret-bearing YAML variants are ignored and absent from Git history.
 - The rules explicitly protect unrelated working-tree changes and require
   monitoring GitHub Actions after code pushes.
