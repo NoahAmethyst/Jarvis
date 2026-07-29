@@ -7,6 +7,7 @@
 - 解释 LangGraph 中节点、边和条件路由的作用。
 - 画出 Jarvis 的完整执行图。
 - 说明为什么 Agent 适合用图表达。
+- 说明 `agent_dispatch` 只选择领域指令，不会启动独立 Worker Agent。
 - 理解工具调用回路和 Reflection 重试回路。
 
 ## 核心概念
@@ -17,6 +18,7 @@ Jarvis 的主流程是：
 
 ```text
 memory_load
+  -> agent_dispatch
   -> rag_retrieve
   -> plan_and_call
   -> 如果模型请求工具：tool_node -> plan_and_call
@@ -38,9 +40,10 @@ memory_load
 建议阅读顺序：
 
 1. `jarvis/agent/graph.py`：看 `StateGraph(AgentState)`、节点注册、边注册和 compile。
-2. `jarvis/agent/nodes/plan_and_call.py`：看模型如何生成 AIMessage 或工具调用。
-3. `jarvis/agent/nodes/reflect.py`：看 Reflection 如何更新评分和重试次数。
-4. `jarvis/tools/registry.py`：看 ToolNode 使用的工具来自哪里。
+2. `jarvis/agent/nodes/agent_dispatch.py`：看领域 Agent 指令如何被选择并写入 state。
+3. `jarvis/agent/nodes/plan_and_call.py`：看模型如何生成 AIMessage 或工具调用。
+4. `jarvis/agent/nodes/reflect.py`：看 Reflection 如何更新评分和重试次数。
+5. `jarvis/tools/registry.py`：看 ToolNode 使用的工具来自哪里。
 
 重点函数：
 
@@ -48,6 +51,8 @@ memory_load
 - `_route_after_reflect`
 
 它们是 Jarvis 的条件路由核心。
+
+`agent_dispatch` 虽然名字中有 Agent，但当前不会调用独立 Agent Runtime。它只把一个 `AgentDefinition` 写入 `active_agent`，随后由 `plan_and_call` 把其中的 instructions 注入同一个主 Agent 的 system prompt。更完整的 Worker Agent 和多 Agent 编排边界见 [11 Agent 编排与 Worker Agent](11-agent-orchestration-and-worker-agents.md)。
 
 ## 关键设计问题
 
@@ -66,10 +71,11 @@ memory_load
 ## 学习检查
 
 1. Jarvis 的入口节点是什么？
-2. `_route_after_plan` 根据什么决定是否进入 `tool_node`？
-3. `_route_after_reflect` 根据哪些字段决定是否重试？
-4. 工具执行后为什么不直接结束？
-5. Agent 图比长函数更适合表达什么？
+2. `agent_dispatch` 在主流程中的位置和输出是什么？
+3. `_route_after_plan` 根据什么决定是否进入 `tool_node`？
+4. `_route_after_reflect` 根据哪些字段决定是否重试？
+5. 工具执行后为什么不直接结束？
+6. Agent 图比长函数更适合表达什么？
 
 ## 小练习
 

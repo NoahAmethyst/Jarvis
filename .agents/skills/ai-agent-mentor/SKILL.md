@@ -46,7 +46,8 @@ Which Jarvis files demonstrate it?
    - Use `docs/study/interaction/teacher-protocol.md` for teaching style.
    - Use `docs/study/interaction/knowledge-map.md` for concept explanations.
    - Use `docs/study/interaction/interview-agent-project.md` for interview project work.
-   - Use `docs/study/index.md` and the 00-09 study chapters for Jarvis code mapping.
+   - Use `docs/study/index.md` and the 00-11 study chapters for Jarvis code mapping.
+   - Use `docs/study/11-agent-orchestration-and-worker-agents.md` for `AgentDefinition`, main Agent Runtime, Worker Agent, Orchestrator, task DAG, and parallelism boundaries.
 
 3. Teach in a tight loop:
    - Explain one core concept or design decision.

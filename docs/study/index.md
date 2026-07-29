@@ -5,7 +5,7 @@
 - 学习轨：理解 Agent 的概念、边界、设计思想和工程判断。
 - 项目轨：把每个概念映射回 Jarvis 当前代码，知道真实项目里这些思想如何落地。
 
-Jarvis 是一个基于 LangGraph 的 Agent 后端。它接收 HTTP 或 gRPC 请求，把请求转换成 AgentState，然后经过记忆加载、RAG 检索、LLM 规划、工具调用、反思评分和记忆写入，最后返回答案。
+Jarvis 是一个基于 LangGraph 的 Agent 后端。它接收 HTTP 或 gRPC 请求，把请求转换成 AgentState，然后经过记忆加载、领域 Agent 指令选择、RAG 检索、LLM 规划、工具调用、反思评分和记忆写入，最后返回答案。
 
 ## 推荐阅读顺序
 
@@ -20,7 +20,8 @@ Jarvis 是一个基于 LangGraph 的 Agent 后端。它接收 HTTP 或 gRPC 请�
 9. [08 API 边界与服务设计](08-api-boundary-and-service-design.md)
 10. [09 Agent 工程思维](09-engineering-thinking.md)
 11. [10 节点设计与边界判断](10-nodes-and-graph-design.md)
-12. [互动学习档案](interaction/index.md)
+12. [11 Agent 编排与 Worker Agent](11-agent-orchestration-and-worker-agents.md)
+13. [互动学习档案](interaction/index.md)
 
 ## 项目架构地图
 
@@ -53,6 +54,7 @@ Jarvis 是一个基于 LangGraph 的 Agent 后端。它接收 HTTP 或 gRPC 请�
 - 画出 Jarvis 的执行路径和状态流转。
 - 判断一个能力应该放在 API、Graph、Node、Tool、Memory 还是 LLM Provider 层。
 - 解释为什么 Agent 需要状态、工具、记忆、反思和降级策略。
+- 区分领域指令配置、主 Agent Runtime、Worker Agent 和 Agent Orchestrator，并判断任务何时适合并行。
 - 面对一个新需求时，先做边界设计，再让实现者写代码。
 
 ## 学习方法

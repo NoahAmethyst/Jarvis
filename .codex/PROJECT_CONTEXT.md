@@ -192,6 +192,14 @@ Thresholds come from:
 ## Custom Agent Dispatch
 
 - Agent representation: `jarvis/agents/__init__.py::AgentDefinition`.
+- Terminology boundary:
+  - `AgentDefinition` is a domain prompt/skill configuration, not an
+    independently executable Worker Agent.
+  - The compiled LangGraph is the current executable main Agent Runtime.
+  - Jarvis does not currently have Worker Agent task contracts, a task DAG,
+    multi-Worker fan-out/fan-in, result reducers, or a Supervisor.
+  - Multiple tool calls in one main-Agent turn do not by themselves constitute
+    multi-Agent orchestration.
 - Loader: `jarvis/agents/loader.py`.
 - Dispatcher: `jarvis/agents/dispatcher.py`.
 - Supported directory: `.agents/skills/<agent-name>/`.
@@ -230,6 +238,9 @@ Thresholds come from:
   - Original implementation plan.
 - `docs/study`
   - Learning path for AI Agent concepts mapped to Jarvis code.
+  - `docs/study/11-agent-orchestration-and-worker-agents.md` is the canonical
+    learning chapter for AgentDefinition vs main Agent Runtime vs Worker Agent,
+    orchestration, task contracts, DAGs, and controlled parallelism.
   - `docs/study/interaction` stores learning profile, staged plan, interview
     framing, and teaching protocol.
 - User screenshot correction on 2026-07-09 confirmed the relevant handoff

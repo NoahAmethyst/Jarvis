@@ -5,7 +5,7 @@
 学完本章，你应该能：
 
 - 解释 LangGraph 中"节点"是什么，它的职责边界在哪里。
-- 区分"加一个节点"和"创建一个新 Agent"各自适合什么场景。
+- 区分"加一个节点"、"选择领域 Agent"和"创建 Worker Agent"各自适合什么场景。
 - 根据一个新需求，判断应该插入节点还是拆分服务。
 - 用知识提取需求为例，独立设计节点位置和状态字段。
 
@@ -13,35 +13,42 @@
 
 ### 节点是什么
 
-节点（Node）是 LangGraph 图中的一个执行单元。它接收当前的 AgentState，做一件事，然后返回更新后的 AgentState。
+节点（Node）是 LangGraph 图中的一个执行单元。它接收当前的 `AgentState`，做一件事，然后返回需要合并到 state 的部分更新。LangGraph 根据 state 定义和 reducer 合并更新，不要求每个节点返回完整 `AgentState`。
 
 ```text
 输入：AgentState（当前完整状态）
 执行：一段逻辑（调用 LLM、读数据库、分类文本……）
-输出：AgentState（更新后的状态）
+输出：dict（本节点负责的部分状态更新）
 ```
 
-节点不知道自己前面是谁、后面是谁。它只关心：从 state 里取我需要的字段，处理完，把结果放回 state。
+节点通常不需要知道自己前面和后面是谁。它只关心：从 state 里读取需要的字段，处理完后返回自己负责的更新。
 
 节点的职责应该单一。"加载历史记忆"是一个节点，"检索知识库"是另一个节点，"让模型规划和调用工具"是另一个节点。不要把多件事塞进一个节点。
 
-### 节点 vs Agent
+### 节点、`AgentDefinition` 与 Worker Agent
 
 这是初学者最容易混淆的边界。
 
-| 对比维度 | 节点 | 独立 Agent |
-|---------|------|-----------|
-| 部署边界 | 同一个进程内 | 独立进程 / 独立服务 |
-| 扩缩容 | 随主服务一起 | 独立扩缩 |
-| 跨系统复用 | 仅限当前图 | 可被多个系统调用 |
-| 通信方式 | 直接访问 AgentState | HTTP / gRPC / 消息队列 |
-| 适合场景 | 流程内的一个步骤 | 独立域、独立团队、高流量分离 |
+| 对比维度 | 节点 | Jarvis `AgentDefinition` | Worker Agent |
+|---------|------|--------------------------|--------------|
+| 本质 | 图中的一个执行步骤 | 被动态选择的领域指令配置 | 接收子任务并返回结果的执行单元 |
+| 输入 | 当前 `AgentState` | 名称、描述和 instructions | 明确的任务契约和裁剪后的 context |
+| 状态 | 读 state，返回部分更新 | 没有独立运行时状态 | 拥有隔离的局部任务状态 |
+| 工具和循环 | 按节点实现决定 | 继承主 Agent 的工具和循环 | 通常有自己的工具白名单和有限循环 |
+| 部署边界 | 通常同进程 | 同进程配置数据 | 可同进程、子图、后台 Worker 或远程服务 |
+| 适合场景 | 流程内单一步骤 | 给主 Agent 切换领域行为 | 可独立验收的复杂子任务 |
 
 **判断规则：**
 
 如果你能把需求描述成"在现有流程的某个位置，多做一件事"——那就是节点。
 
-如果你能把需求描述成"这件事需要独立部署、独立扩容、或者被别的系统调用"——才考虑 Agent。
+如果只是让同一个主 Agent 获得某个领域的指令和知识——更接近 Jarvis 当前的 `AgentDefinition` / Skill。
+
+如果需求拥有独立目标、context、工具、执行循环和结果契约——可以考虑 Worker Agent。
+
+如果需求还需要独立扩容、资源隔离、跨系统复用或独立团队维护——再考虑把 Node 或 Worker 拆成独立服务。部署方式不是判断它是否为 Agent 的唯一标准。
+
+更完整的选择、委派、编排和并行边界见 [11 Agent 编排与 Worker Agent](11-agent-orchestration-and-worker-agents.md)。
 
 ### 节点职责分离原则
 
@@ -62,7 +69,7 @@ memory_write       →  读取 state 里的待写内容，统一写入 Qdrant
 
 **需求：** 用户输入时，自动识别内容是"事实"（新闻、理论）还是"主观内容"（观点、偏好），把事实内容存入知识库。
 
-**第一步：确认是节点还是 Agent**
+**第一步：确认是节点、领域指令还是 Worker Agent**
 
 这个需求是"在现有流程的某个位置，多做一件事（分类 + 挂到 state）"。不需要独立部署，不需要跨系统调用。结论：**新节点**。
 
@@ -71,7 +78,7 @@ memory_write       →  读取 state 里的待写内容，统一写入 Qdrant
 节点要在 `memory_write` 之前，因为 `memory_write` 负责实际写入，`knowledge_extract` 只负责判断"该不该写、写什么"。
 
 ```text
-memory_load → rag_retrieve → plan_and_call ⇄ tool_node → reflect → knowledge_extract → memory_write
+memory_load → agent_dispatch → rag_retrieve → plan_and_call ⇄ tool_node → reflect → knowledge_extract → memory_write
 ```
 
 **第三步：确认 AgentState 需要新字段**
@@ -80,13 +87,14 @@ memory_load → rag_retrieve → plan_and_call ⇄ tool_node → reflect → kno
 
 ```python
 # jarvis/agent/state.py
-@dataclass
-class AgentState:
+class AgentState(TypedDict):
     # ...已有字段...
-    pending_knowledge: list[str] = field(default_factory=list)  # 新增
+    pending_knowledge: list[str]  # 新增
 ```
 
 `knowledge_extract` 写这个字段，`memory_write` 读这个字段并写 Qdrant。
+
+因为当前 `AgentState` 使用必填 `TypedDict` 字段，新增字段后还要在 HTTP、gRPC 等初始 state 构造位置提供初始值；如果字段确实允许缺省，则应在类型定义和读取逻辑中显式表达可选语义。
 
 **第四步：节点实现思路**
 
@@ -103,18 +111,18 @@ subjective = opinion, preference, emotion
 Text: {text}
 """
 
-async def knowledge_extract(state: AgentState) -> AgentState:
+async def knowledge_extract(state: AgentState) -> dict:
     user_input = state["messages"][-1].content
     result = await llm.ainvoke(CLASSIFY_PROMPT.format(text=user_input))
     parsed = json.loads(result.content)
 
     if parsed["type"] in ("fact", "both"):
-        state["pending_knowledge"] = parsed["extracted_facts"]
+        return {"pending_knowledge": parsed["extracted_facts"]}
 
-    return state
+    return {"pending_knowledge": []}
 ```
 
-节点本身不写数据库，只把分类结果放进 state。`memory_write` 里消费 `pending_knowledge`，写入 Qdrant 时带上 `type: "fact"` 元数据标签。
+节点本身不写数据库，只返回 `pending_knowledge` 的部分状态更新，由 LangGraph 合并进 state。`memory_write` 再消费这个字段，写入 Qdrant 时带上 `type: "fact"` 元数据标签。
 
 ## Jarvis 代码地图
 
@@ -134,7 +142,7 @@ async def knowledge_extract(state: AgentState) -> AgentState:
 
 **节点数量多了会不会很乱？**
 
-不会，反而更清晰。每个节点一个文件、一个职责，比一个大函数里写 300 行条件分支更容易读懂和维护。图结构本身就是显式的执行路径文档。
+节点增多需要通过清晰命名、子图和职责分组管理，但单一职责仍然比把大量条件分支塞进一个函数更容易测试和维护。图结构本身也是显式的执行路径文档。
 
 **节点里可以直接访问数据库吗？**
 
@@ -143,10 +151,11 @@ async def knowledge_extract(state: AgentState) -> AgentState:
 ## 学习检查
 
 1. 节点的输入和输出分别是什么？
-2. "用户输入分类"这个能力，放节点还是独立 Agent？判断依据是什么？
+2. "用户输入分类"这个能力，放节点还是 Worker Agent？判断依据是什么？
 3. 两个节点之间如何传递数据？
 4. 为什么 `knowledge_extract` 不直接写 Qdrant，而是先放进 `pending_knowledge`？
 5. 节点职责单一有什么好处？
+6. Worker Agent 为什么不一定需要独立部署？
 
 ## 小练习
 

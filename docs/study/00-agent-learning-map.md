@@ -25,6 +25,7 @@ Jarvis 当前不是一个无限自治的 Agent，而是一个工程化的后端 
 用户输入
   -> AgentState
   -> 加载历史记忆
+  -> 选择领域 Agent 指令
   -> 检索知识库
   -> LLM 规划和回答
   -> 必要时调用工具
@@ -75,6 +76,7 @@ Agent 概念很容易停留在抽象词上，比如 planning、memory、reflecti
 - API 输入
 - AgentState
 - memory_load
+- agent_dispatch
 - rag_retrieve
 - plan_and_call
 - tool_node
