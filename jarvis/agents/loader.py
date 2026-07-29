@@ -5,8 +5,21 @@ from pathlib import Path
 import yaml
 
 from jarvis.agents import AgentDefinition
+from jarvis.logging_config import format_log_tags
 
 logger = logging.getLogger(__name__)
+
+
+def _log_parse_failure(path: Path, error: Exception) -> None:
+    logger.warning(
+        "%s Failed to parse Agent definition file=%s",
+        format_log_tags(
+            ("组件", "Agent加载器"),
+            ("结果", "失败"),
+            ("错误", type(error).__name__),
+        ),
+        path,
+    )
 
 
 def _parse_json(agent_dir: Path) -> AgentDefinition | None:
@@ -21,8 +34,8 @@ def _parse_json(agent_dir: Path) -> AgentDefinition | None:
             instructions=data.get("instructions", ""),
             source_file=str(f),
         )
-    except Exception as e:
-        logger.warning("Failed to parse %s: %s", f, e)
+    except Exception as error:
+        _log_parse_failure(f, error)
         return None
 
 
@@ -38,8 +51,8 @@ def _parse_yaml(agent_dir: Path) -> AgentDefinition | None:
             instructions=data.get("instructions", ""),
             source_file=str(f),
         )
-    except Exception as e:
-        logger.warning("Failed to parse %s: %s", f, e)
+    except Exception as error:
+        _log_parse_failure(f, error)
         return None
 
 
@@ -66,8 +79,8 @@ def _parse_claude(agent_dir: Path) -> AgentDefinition | None:
             instructions=instructions,
             source_file=str(skill_md),
         )
-    except Exception as e:
-        logger.warning("Failed to parse %s: %s", skill_md, e)
+    except Exception as error:
+        _log_parse_failure(skill_md, error)
         return None
 
 

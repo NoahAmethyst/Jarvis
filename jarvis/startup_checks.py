@@ -23,6 +23,7 @@ from jarvis.llm.errors import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
+from jarvis.logging_config import format_log_tags
 from jarvis.memory.knowledge import _get_embeddings, _parse_embed_model
 
 
@@ -97,16 +98,24 @@ def check_chat_providers(
                 )
         except Exception as error:
             logger.error(
-                "Chat model startup check failed provider=%s model=%s category=%s",
-                target.provider_name,
-                target.model_id,
-                failure_category(error),
+                "%s Startup connectivity check failed",
+                format_log_tags(
+                    ("供应商", target.provider_name),
+                    ("模型", target.model_id),
+                    ("类型", "Chat"),
+                    ("结果", "失败"),
+                    ("类别", failure_category(error)),
+                ),
             )
             continue
         logger.info(
-            "Chat model startup check succeeded provider=%s model=%s",
-            target.provider_name,
-            target.model_id,
+            "%s Startup connectivity check completed",
+            format_log_tags(
+                ("供应商", target.provider_name),
+                ("模型", target.model_id),
+                ("类型", "Chat"),
+                ("结果", "成功"),
+            ),
         )
 
 
@@ -118,9 +127,14 @@ def check_embedding_model(
         provider_name, model_id, _ = _parse_embed_model(model_spec)
     except Exception as error:
         logger.error(
-            "Embedding model startup check failed "
-            "provider=unknown model=unknown category=%s",
-            failure_category(error),
+            "%s Startup connectivity check failed",
+            format_log_tags(
+                ("供应商", "unknown"),
+                ("模型", "unknown"),
+                ("类型", "Embedding"),
+                ("结果", "失败"),
+                ("类别", failure_category(error)),
+            ),
         )
         return
     try:
@@ -136,16 +150,24 @@ def check_embedding_model(
         embeddings.embed_query("Jarvis startup connectivity check")
     except Exception as error:
         logger.error(
-            "Embedding model startup check failed provider=%s model=%s category=%s",
-            provider_name,
-            model_id,
-            failure_category(error),
+            "%s Startup connectivity check failed",
+            format_log_tags(
+                ("供应商", provider_name),
+                ("模型", model_id),
+                ("类型", "Embedding"),
+                ("结果", "失败"),
+                ("类别", failure_category(error)),
+            ),
         )
         return
     logger.info(
-        "Embedding model startup check succeeded provider=%s model=%s",
-        provider_name,
-        model_id,
+        "%s Startup connectivity check completed",
+        format_log_tags(
+            ("供应商", provider_name),
+            ("模型", model_id),
+            ("类型", "Embedding"),
+            ("结果", "成功"),
+        ),
     )
 
 
@@ -160,8 +182,14 @@ def run_model_startup_checks(
         settings = loader()
     except Exception as error:
         logger.error(
-            "Chat model startup checks failed category=%s",
-            failure_category(error),
+            "%s Could not load active provider configuration",
+            format_log_tags(
+                ("供应商", "unknown"),
+                ("模型", "unknown"),
+                ("类型", "Chat"),
+                ("结果", "失败"),
+                ("类别", failure_category(error)),
+            ),
         )
     else:
         check_chat_providers(settings, adapters=adapters)

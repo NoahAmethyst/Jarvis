@@ -27,12 +27,15 @@ async def test_model_check_failure_does_not_stop_startup(monkeypatch, caplog):
         with pytest.raises(StorageInitializationReached):
             await main.serve()
 
-    assert "Model startup checks failed category=internal" in caplog.text
+    assert (
+        "【组件:模型启动检查】【结果:失败】【类别:internal】 "
+        "Unexpected startup check failure"
+    ) in caplog.text
     assert "secret-response-body" not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_uvicorn_uses_the_root_logging_configuration(monkeypatch):
+async def test_uvicorn_uses_the_root_logging_configuration(monkeypatch, caplog):
     grpc_server = MagicMock()
     grpc_server.start = AsyncMock()
     grpc_server.wait_for_termination = AsyncMock()
@@ -53,7 +56,8 @@ async def test_uvicorn_uses_the_root_logging_configuration(monkeypatch):
         main.uvicorn, "Server", MagicMock(return_value=http_server)
     )
 
-    await main.serve()
+    with caplog.at_level(logging.INFO, logger="jarvis.main"):
+        await main.serve()
 
     config_factory.assert_called_once_with(
         main.app,
@@ -62,6 +66,12 @@ async def test_uvicorn_uses_the_root_logging_configuration(monkeypatch):
         log_level="info",
         log_config=None,
     )
+    assert (
+        f"【服务:gRPC】【端口:{main.GRPC_PORT}】【状态:就绪】 Server listening"
+    ) in caplog.text
+    assert (
+        f"【服务:HTTP】【端口:{main.HTTP_PORT}】【状态:启动】 Server starting"
+    ) in caplog.text
 
 
 @pytest.mark.asyncio

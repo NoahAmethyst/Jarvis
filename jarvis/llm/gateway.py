@@ -27,6 +27,7 @@ from jarvis.llm.errors import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
+from jarvis.logging_config import format_log_tags
 
 
 logger = logging.getLogger(__name__)
@@ -107,9 +108,12 @@ class LLMGateway:
             return thinking
         if is_override and thinking.on_unsupported == "disable":
             logger.info(
-                "Disabling unsupported thinking for LLM override provider=%s model=%s",
-                provider_name,
-                model_id,
+                "%s Unsupported thinking disabled for override",
+                format_log_tags(
+                    ("供应商", provider_name),
+                    ("模型", model_id),
+                    ("状态", "降级"),
+                ),
             )
             return thinking.model_copy(update={"mode": "disabled", "effort": None})
         raise LLMInvalidRequestError("selected LLM does not support required thinking capability")
@@ -242,10 +246,13 @@ class LLMGateway:
             except Exception as error:
                 normalized = normalize_provider_error(error)
                 logger.warning(
-                    "LLM request failed provider=%s model=%s error=%s",
-                    provider_name,
-                    model_id,
-                    type(error).__name__,
+                    "%s LLM request failed",
+                    format_log_tags(
+                        ("供应商", provider_name),
+                        ("模型", model_id),
+                        ("结果", "失败"),
+                        ("错误", type(error).__name__),
+                    ),
                 )
                 if (
                     isinstance(normalized, TRANSIENT_ERRORS)

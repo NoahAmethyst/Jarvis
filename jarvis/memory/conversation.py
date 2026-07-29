@@ -3,6 +3,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from jarvis.config import POSTGRES_DSN
+from jarvis.logging_config import format_log_tags
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,10 @@ def init_db():
         conn.commit()
     finally:
         conn.close()
-    logger.info("Conversation DB initialized")
+    logger.info(
+        "%s Conversation storage initialized",
+        format_log_tags(("组件", "PostgreSQL"), ("状态", "就绪")),
+    )
 
 
 def load_history(user_id: str, limit: int = 20) -> list[BaseMessage]:

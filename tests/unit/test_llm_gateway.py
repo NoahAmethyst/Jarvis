@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import sys
@@ -354,21 +355,28 @@ def test_invalid_response_is_not_retried(settings, fake_adapters):
     assert fake_adapters.deepseek.model.invoke.call_count == 1
 
 
-def test_raw_timeout_is_normalized_and_redacted(settings, fake_adapters):
+def test_raw_timeout_is_normalized_and_redacted(
+    settings, fake_adapters, caplog
+):
     request = httpx.Request("POST", "https://api.example/chat")
     fake_adapters.deepseek.model.invoke.side_effect = openai.APITimeoutError(
         request=request
     )
     gateway = _gateway(settings, fake_adapters)
 
-    with pytest.raises(LLMTimeoutError) as exc_info:
-        gateway.chat(
-            "answer",
-            [HumanMessage(content="hello")],
-            tools=[fake_tool],
-        )
+    with caplog.at_level(logging.WARNING, logger="jarvis.llm.gateway"):
+        with pytest.raises(LLMTimeoutError) as exc_info:
+            gateway.chat(
+                "answer",
+                [HumanMessage(content="hello")],
+                tools=[fake_tool],
+            )
 
     assert str(exc_info.value) == "LLM request timed out"
+    assert (
+        "【供应商:deepseek】【模型:deepseek-v4-pro】【结果:失败】"
+        "【错误:APITimeoutError】 LLM request failed"
+    ) in caplog.text
 
 
 def test_raw_rate_limit_is_normalized_and_redacted(settings, fake_adapters):

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import pytest
 import tempfile
@@ -152,38 +153,47 @@ def test_dispatch_no_agents_returns_none():
     assert score == 0.0
 
 
-def test_dispatch_above_threshold_returns_agent():
+def test_dispatch_above_threshold_returns_agent(caplog):
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
     agent = _make_agent()
-    with patch(
-        "jarvis.agents.dispatcher.llm.chat",
-        return_value=AIMessage(content="0.9"),
-    ):
-        result, score = dispatch_agent(
-            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
-        )
+    with caplog.at_level(logging.INFO, logger="jarvis.agents.dispatcher"):
+        with patch(
+            "jarvis.agents.dispatcher.llm.chat",
+            return_value=AIMessage(content="0.9"),
+        ):
+            result, score = dispatch_agent(
+                "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+            )
 
     assert result is agent
     assert score == pytest.approx(0.9)
+    assert (
+        "【节点:agent_dispatch】【Agent:TestAgent】【评分:0.90】 Agent selected"
+    ) in caplog.text
 
 
-def test_dispatch_below_threshold_returns_none():
+def test_dispatch_below_threshold_returns_none(caplog):
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
     agent = _make_agent()
-    with patch(
-        "jarvis.agents.dispatcher.llm.chat",
-        return_value=AIMessage(content="0.3"),
-    ):
-        result, score = dispatch_agent(
-            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
-        )
+    with caplog.at_level(logging.INFO, logger="jarvis.agents.dispatcher"):
+        with patch(
+            "jarvis.agents.dispatcher.llm.chat",
+            return_value=AIMessage(content="0.3"),
+        ):
+            result, score = dispatch_agent(
+                "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+            )
 
     assert result is None
     assert score == pytest.approx(0.3)
+    assert (
+        "【节点:agent_dispatch】【Agent:TestAgent】【评分:0.30】"
+        "【阈值:0.60】【状态:跳过】 Best Agent is below threshold"
+    ) in caplog.text
 
 
 def test_dispatch_picks_highest_score():
@@ -212,21 +222,27 @@ def test_dispatch_picks_highest_score():
     assert score == pytest.approx(0.85)
 
 
-def test_dispatch_llm_failure_returns_none():
+def test_dispatch_llm_failure_returns_none(caplog):
     from unittest.mock import MagicMock, patch
     from jarvis.agents.dispatcher import dispatch_agent
 
     agent = _make_agent()
-    with patch(
-        "jarvis.agents.dispatcher.llm.chat",
-        side_effect=Exception("LLM timeout"),
-    ):
-        result, score = dispatch_agent(
-            "test query", [agent], threshold=0.6, model_override="siliconflow/test"
-        )
+    with caplog.at_level(logging.WARNING, logger="jarvis.agents.dispatcher"):
+        with patch(
+            "jarvis.agents.dispatcher.llm.chat",
+            side_effect=Exception("secret-agent-error"),
+        ):
+            result, score = dispatch_agent(
+                "test query", [agent], threshold=0.6, model_override="siliconflow/test"
+            )
 
     assert result is None
     assert score == 0.0
+    assert (
+        "【节点:agent_dispatch】【Agent:TestAgent】【状态:评分失败】"
+        "【错误:Exception】 Could not score Agent"
+    ) in caplog.text
+    assert "secret-agent-error" not in caplog.text
 
 
 def test_dispatch_malformed_score_excluded():

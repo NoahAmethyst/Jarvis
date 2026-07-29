@@ -2,6 +2,20 @@
 
 基于 LangGraph 构建的 LLM 智能助手后端服务。支持工具链（在线搜索、网页抓取）、跨会话记忆、RAG 检索增强和自评分反思机制，同时暴露 FastAPI（HTTP）和 gRPC 两套接口。
 
+## 核心能力
+
+- **可编排 Agent 工作流**：通过 LangGraph 串联记忆加载、领域 Agent 分发、
+  RAG、工具调用、反思重试和持久化。
+- **多供应商 LLM Gateway**：使用 Profile 统一管理 DeepSeek、OpenAI-compatible
+  和 Anthropic 协议，支持请求级模型覆盖、能力校验和有界重试。
+- **跨会话记忆与知识库**：PostgreSQL 保存对话历史，Qdrant 提供向量检索和
+  工具结果知识沉淀。
+- **双协议服务**：同时提供 FastAPI HTTP 与 gRPC 接口。
+- **启动前模型检查**：仅检查 Profiles 实际引用的 Chat 供应商，并检查当前
+  Embedding 模型的连通性和凭据有效性。
+- **面向运维的可观测性**：INFO/WARN/ERROR 彩色显示，关键字段使用
+  `【类别:值】` 标签，并提供独立的存活与就绪探针。
+
 ## 架构
 
 ```
@@ -60,14 +74,94 @@ cp .env.example .env
 python jarvis/main.py
 ```
 
-进程会在绑定端口前，对每个活跃 Chat Provider 执行一次真实模型请求，并对
-Embedding 执行一次真实请求。探测会产生少量 API 用量并可能延迟端口监听；
-失败只记录脱敏日志，不阻止后续启动。随后初始化 PostgreSQL 和 Qdrant，任一
-存储初始化失败都会阻止服务监听。
-
 HTTP 服务默认监听 `0.0.0.0:8080`，gRPC 使用明文监听 `[::]:9090`，并非只
 绑定 localhost。当前应用没有鉴权或 TLS；启动前应通过防火墙、私网或可信
 反向代理隔离访问。
+
+## 启动连通性检查
+
+Jarvis 在绑定 HTTP/gRPC 端口前执行模型连通性检查：
+
+- 扫描 `llm.yaml` 的 `profiles`，对每个实际引用的 Chat 供应商执行一次真实
+  模型请求；多个 Profile 引用同一供应商时只检查一次。
+- 对 `EMBED_MODEL` 指定的 Embedding 模型执行一次真实向量请求。默认配置因此
+  会检查 DeepSeek Chat 和 SiliconFlow Embedding。
+- 单次探测使用 10 秒请求超时，Embedding 探测关闭 SDK 重试。探测会产生少量
+  API 用量，并可能延迟端口开始监听。
+- 失败按 `credential`、`timeout`、`connectivity`、`configuration` 等稳定类别
+  记录，日志不会包含 API Key、供应商响应正文或完整异常详情。
+- 模型检查失败不会阻止服务继续启动；PostgreSQL 或 Qdrant 初始化失败仍会阻止
+  HTTP/gRPC 开始监听。
+
+启动检查只覆盖当前生效配置，不会遍历 `llm.yaml` 中未被 Profile 引用的 Chat
+供应商。Embedding 不属于 Chat Profiles，因此始终按当前 `EMBED_MODEL` 单独
+检查。
+
+## 日志与可观测性
+
+默认日志等级使用颜色突出显示：
+
+| 等级 | 终端颜色 | 典型用途 |
+|------|----------|----------|
+| `INFO` | 绿色 | 启动成功、Agent 选择、服务就绪 |
+| `WARN` | 黄色 | 请求重试、节点降级、可恢复异常 |
+| `ERROR` | 红色 | 凭据无效、供应商不可用、配置错误 |
+
+不需要 ANSI 颜色时，可设置标准环境变量 `NO_COLOR`：
+
+```bash
+NO_COLOR=1 python jarvis/main.py
+```
+
+关键日志采用连续的 `【类别:值】` 标签，标签值保留配置和代码中的原始标识：
+
+```text
+【供应商:deepseek】【模型:deepseek-v4-pro】【类型:Chat】【结果:成功】 Startup connectivity check completed
+【节点:agent_dispatch】【Agent:ai-agent-mentor】【评分:0.86】 Agent selected
+【节点:rag_retrieve】【组件:Qdrant】【状态:降级】【错误:ResponseHandlingException】 Retrieval unavailable
+【服务:gRPC】【端口:9090】【状态:就绪】 Server listening
+```
+
+可以使用完整标签快速定位，不依赖英文正文：
+
+```bash
+kubectl logs deployment/jarvis | grep -F '【供应商:deepseek】'
+kubectl logs deployment/jarvis | grep -F '【节点:agent_dispatch】'
+kubectl logs deployment/jarvis | grep -F '【组件:Qdrant】'
+```
+
+标签只包含供应商名、模型 ID、节点、组件、评分、状态和错误类型等稳定元数据，
+不会记录 API Key、完整用户输入、完整模型响应或供应商异常正文。Uvicorn 的普通
+访问日志保持原格式。
+
+## 健康检查
+
+健康端点不调用 LLM、Embedding、PostgreSQL 或 Qdrant，不会额外产生模型费用：
+
+| Endpoint | 成功响应 | 未就绪/失败 | 用途 |
+|----------|----------|-------------|------|
+| `GET /health/live` | `200 {"status":"ok"}` | 进程不可访问 | 判断进程是否存活 |
+| `GET /health/ready` | `200 {"status":"ready"}` | `503 {"detail":"not ready"}` | 判断启动初始化是否完成 |
+
+Docker `HEALTHCHECK` 使用 `/health/live`。Kubernetes readinessProbe 使用
+`/health/ready`，livenessProbe 使用 `/health/live`。这两个路径的
+`uvicorn.access` 日志会被过滤，避免周期性探针刷屏；`/docs`、`/chat` 等普通
+访问日志仍会正常保留。
+
+## Kubernetes 部署
+
+[`jarvis.yaml`](jarvis.yaml) 定义 ConfigMap、Deployment、Service 和专用健康
+探针，镜像来自
+`registry.cn-hangzhou.aliyuncs.com/lexmargin/jarvis:latest`。
+
+清单引用的 `jarvis-secrets` 必须通过集群的安全凭据流程预先创建。不要把真实
+API Key、数据库密码、Token 或 kubeconfig 写入 `jarvis.yaml`、`llm.yaml` 或
+Git 提交。凭据准备完成后可应用清单：
+
+```bash
+kubectl apply -f jarvis.yaml
+kubectl rollout status deployment/jarvis --timeout=180s
+```
 
 ## HTTP API
 
@@ -298,7 +392,7 @@ pytest tests/ -v
 ```
 jarvis/
 ├── config.py              # 环境变量与默认配置
-├── logging_config.py      # 进程日志格式与第三方日志级别
+├── logging_config.py      # 彩色等级、关键标签与健康访问日志过滤
 ├── main.py                # 服务入口（并行启动 HTTP + gRPC）
 ├── startup_checks.py      # 启动前 Chat Provider 与 Embedding 真实探测
 ├── llm/                   # Profile Gateway 与协议 Adapter

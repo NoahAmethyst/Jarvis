@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import unicodedata
 
 
 LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -16,6 +17,29 @@ LEVEL_COLORS = {
     logging.WARNING: "\x1b[33m",
     logging.ERROR: "\x1b[31m",
 }
+MAX_LOG_TAG_PART_LENGTH = 160
+
+
+def _safe_tag_part(value: object) -> str:
+    sanitized = "".join(
+        " "
+        if unicodedata.category(character).startswith("C")
+        or unicodedata.category(character) in {"Zl", "Zp"}
+        else character
+        for character in str(value)
+    )
+    return (
+        sanitized.replace("【", "(").replace("】", ")")[
+            :MAX_LOG_TAG_PART_LENGTH
+        ]
+    )
+
+
+def format_log_tags(*fields: tuple[str, object]) -> str:
+    return "".join(
+        f"【{_safe_tag_part(name)}:{_safe_tag_part(value)}】"
+        for name, value in fields
+    )
 
 
 class ColorLevelFormatter(logging.Formatter):

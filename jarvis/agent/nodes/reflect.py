@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from jarvis.agent.state import AgentState
 from jarvis.config import REFLECTION_SCORE_THRESHOLD, REFLECTION_MAX_RETRIES
 from jarvis.llm import llm
+from jarvis.logging_config import format_log_tags
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +33,42 @@ def reflect(state: AgentState) -> dict:
         override=state.get("reflect_llm_override"),
     )
 
+    match = re.search(r"\d+\.?\d*", response.content)
     try:
-        match = re.search(r"\d+\.?\d*", response.content)
-        score = float(match.group()) if match else 0.5
+        if match is None:
+            raise ValueError("reflection score is missing")
+        score = float(match.group())
         score = max(0.0, min(1.0, score))
     except (AttributeError, ValueError):
         score = 0.5
-        logger.warning("Could not parse reflection score from: %s", response.content)
+        logger.warning(
+            "%s Could not parse reflection score",
+            format_log_tags(
+                ("节点", "reflect"),
+                ("状态", "解析失败"),
+                ("默认评分", "0.50"),
+            ),
+        )
 
     retry_count = state["retry_count"] + 1
     low_confidence = retry_count >= REFLECTION_MAX_RETRIES and score < REFLECTION_SCORE_THRESHOLD
+    if score < REFLECTION_SCORE_THRESHOLD:
+        status = "低置信度" if low_confidence else "重试"
+        event = (
+            "Reflection remained below threshold"
+            if low_confidence
+            else "Reflection requested another answer"
+        )
+        logger.info(
+            "%s %s",
+            format_log_tags(
+                ("节点", "reflect"),
+                ("评分", f"{score:.2f}"),
+                ("重试", f"{retry_count}/{REFLECTION_MAX_RETRIES}"),
+                ("状态", status),
+            ),
+            event,
+        )
 
     return {
         "reflection_score": score,

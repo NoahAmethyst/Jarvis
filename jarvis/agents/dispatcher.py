@@ -3,6 +3,7 @@ import logging
 from langchain_core.messages import HumanMessage
 from jarvis.agents import AgentDefinition
 from jarvis.llm import llm
+from jarvis.logging_config import format_log_tags
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,10 @@ def dispatch_agent(
 ) -> tuple[AgentDefinition | None, float]:
     """Return (selected_agent, best_score). selected_agent is None if below threshold or on error."""
     if not agents:
+        logger.info(
+            "%s No Agents configured",
+            format_log_tags(("节点", "agent_dispatch"), ("状态", "跳过")),
+        )
         return None, 0.0
     try:
         scored = []
@@ -47,20 +52,58 @@ def dispatch_agent(
             try:
                 score = _score_agent(query, agent, model_override)
                 scored.append((score, agent))
-            except Exception as e:
-                logger.warning("Failed to score agent %s: %s", agent.name, e)
+            except Exception as error:
+                logger.warning(
+                    "%s Could not score Agent",
+                    format_log_tags(
+                        ("节点", "agent_dispatch"),
+                        ("Agent", agent.name),
+                        ("状态", "评分失败"),
+                        ("错误", type(error).__name__),
+                    ),
+                )
 
         if not scored:
+            logger.warning(
+                "%s No Agent scores available, using default behavior",
+                format_log_tags(
+                    ("节点", "agent_dispatch"),
+                    ("状态", "降级"),
+                ),
+            )
             return None, 0.0
 
         best_score, best_agent = max(scored, key=lambda x: x[0])
         if best_score < threshold:
-            logger.debug("Best agent %s score %.2f below threshold %.2f", best_agent.name, best_score, threshold)
+            logger.info(
+                "%s Best Agent is below threshold",
+                format_log_tags(
+                    ("节点", "agent_dispatch"),
+                    ("Agent", best_agent.name),
+                    ("评分", f"{best_score:.2f}"),
+                    ("阈值", f"{threshold:.2f}"),
+                    ("状态", "跳过"),
+                ),
+            )
             return None, best_score
 
-        logger.info("Dispatching to agent %s (score=%.2f)", best_agent.name, best_score)
+        logger.info(
+            "%s Agent selected",
+            format_log_tags(
+                ("节点", "agent_dispatch"),
+                ("Agent", best_agent.name),
+                ("评分", f"{best_score:.2f}"),
+            ),
+        )
         return best_agent, best_score
 
-    except Exception as e:
-        logger.warning("Agent dispatch failed, falling back to default: %s", e)
+    except Exception as error:
+        logger.warning(
+            "%s Agent dispatch failed, using default behavior",
+            format_log_tags(
+                ("节点", "agent_dispatch"),
+                ("状态", "降级"),
+                ("错误", type(error).__name__),
+            ),
+        )
         return None, 0.0

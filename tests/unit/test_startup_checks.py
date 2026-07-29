@@ -119,9 +119,15 @@ def test_chat_check_invokes_each_active_provider_once(caplog):
     assert isinstance(alpha_model.calls[0][0], HumanMessage)
     assert adapters["deepseek"].calls[0][3] == 10.0
     assert adapters["openai_compatible"].calls[0][3] == 10.0
-    assert "provider=alpha model=model-a" in caplog.text
-    assert "provider=beta model=model-c" in caplog.text
-    assert caplog.text.count("startup check succeeded") == 2
+    assert (
+        "【供应商:alpha】【模型:model-a】【类型:Chat】【结果:成功】 "
+        "Startup connectivity check completed"
+    ) in caplog.text
+    assert (
+        "【供应商:beta】【模型:model-c】【类型:Chat】【结果:成功】 "
+        "Startup connectivity check completed"
+    ) in caplog.text
+    assert caplog.text.count("Startup connectivity check completed") == 2
 
 
 def test_chat_check_redacts_failure_and_continues(caplog):
@@ -135,11 +141,16 @@ def test_chat_check_redacts_failure_and_continues(caplog):
     with caplog.at_level(logging.INFO, logger="jarvis.startup_checks"):
         check_chat_providers(_settings(), adapters=adapters)
 
-    assert "provider=alpha model=model-a category=credential" in caplog.text
+    assert (
+        "【供应商:alpha】【模型:model-a】【类型:Chat】【结果:失败】"
+        "【类别:credential】 Startup connectivity check failed"
+    ) in caplog.text
     assert "secret-response-body" not in caplog.text
     assert len(beta_model.calls) == 1
-    assert "provider=beta model=model-c" in caplog.text
-    assert "startup check succeeded" in caplog.text
+    assert (
+        "【供应商:beta】【模型:model-c】【类型:Chat】【结果:成功】 "
+        "Startup connectivity check completed"
+    ) in caplog.text
 
 
 def test_embedding_check_invokes_active_model(caplog):
@@ -153,8 +164,8 @@ def test_embedding_check_invokes_active_model(caplog):
 
     assert embeddings.calls == ["Jarvis startup connectivity check"]
     assert (
-        "Embedding model startup check succeeded "
-        "provider=siliconflow model=Qwen/Qwen3-Embedding-8B"
+        "【供应商:siliconflow】【模型:Qwen/Qwen3-Embedding-8B】"
+        "【类型:Embedding】【结果:成功】 Startup connectivity check completed"
     ) in caplog.text
 
 
@@ -168,9 +179,10 @@ def test_embedding_check_redacts_failure(caplog):
         )
 
     assert (
-        "provider=siliconflow model=Qwen/Qwen3-Embedding-8B category=credential"
-        in caplog.text
-    )
+        "【供应商:siliconflow】【模型:Qwen/Qwen3-Embedding-8B】"
+        "【类型:Embedding】【结果:失败】【类别:credential】 "
+        "Startup connectivity check failed"
+    ) in caplog.text
     assert "secret-response-body" not in caplog.text
 
 
@@ -198,7 +210,10 @@ def test_embedding_check_rejects_unknown_provider_without_request(caplog):
         )
 
     embeddings_factory.assert_not_called()
-    assert "provider=unknown model=unknown category=configuration" in caplog.text
+    assert (
+        "【供应商:unknown】【模型:unknown】【类型:Embedding】【结果:失败】"
+        "【类别:configuration】 Startup connectivity check failed"
+    ) in caplog.text
 
 
 def test_embedding_check_reports_missing_key_as_credential(
@@ -212,9 +227,9 @@ def test_embedding_check_reports_missing_key_as_credential(
         check_embedding_model("siliconflow/embedding-model")
 
     assert (
-        "provider=siliconflow model=embedding-model category=credential"
-        in caplog.text
-    )
+        "【供应商:siliconflow】【模型:embedding-model】【类型:Embedding】"
+        "【结果:失败】【类别:credential】 Startup connectivity check failed"
+    ) in caplog.text
 
 
 def test_failure_categories_distinguish_timeout_connectivity_and_credential():
@@ -237,9 +252,13 @@ def test_startup_checks_continue_to_embedding_when_chat_config_fails(caplog):
         )
 
     assert embeddings.calls == ["Jarvis startup connectivity check"]
-    assert "Chat model startup checks failed category=provider" in caplog.text
+    assert (
+        "【供应商:unknown】【模型:unknown】【类型:Chat】【结果:失败】"
+        "【类别:provider】 "
+        "Could not load active provider configuration"
+    ) in caplog.text
     assert "secret-config-detail" not in caplog.text
-    assert "Embedding model startup check succeeded" in caplog.text
+    assert "【类型:Embedding】【结果:成功】" in caplog.text
 
 
 def test_invalid_chat_config_is_reported_as_configuration(caplog):
@@ -255,5 +274,9 @@ def test_invalid_chat_config_is_reported_as_configuration(caplog):
             embedding_model_spec="siliconflow/embedding-model",
         )
 
-    assert "Chat model startup checks failed category=configuration" in caplog.text
+    assert (
+        "【供应商:unknown】【模型:unknown】【类型:Chat】【结果:失败】"
+        "【类别:configuration】 "
+        "Could not load active provider configuration"
+    ) in caplog.text
     assert "secret-config-detail" not in caplog.text

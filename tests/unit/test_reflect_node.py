@@ -1,3 +1,4 @@
+import logging
 import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
@@ -50,24 +51,35 @@ def test_reflect_low_score_sets_low_confidence_after_max_retries():
     assert result["retry_count"] == 3
 
 
-def test_reflect_low_score_below_max_retries_not_low_confidence():
-    with patch(
-        "jarvis.agent.nodes.reflect.llm.chat",
-        return_value=AIMessage(content="0.3"),
-    ):
-        from jarvis.agent.nodes.reflect import reflect
-        result = reflect(_base_state(retry_count=0))
+def test_reflect_low_score_below_max_retries_not_low_confidence(caplog):
+    with caplog.at_level(logging.INFO, logger="jarvis.agent.nodes.reflect"):
+        with patch(
+            "jarvis.agent.nodes.reflect.llm.chat",
+            return_value=AIMessage(content="0.3"),
+        ):
+            from jarvis.agent.nodes.reflect import reflect
+            result = reflect(_base_state(retry_count=0))
 
     assert result["low_confidence"] is False
     assert result["retry_count"] == 1
+    assert (
+        "【节点:reflect】【评分:0.30】【重试:1/3】【状态:重试】 "
+        "Reflection requested another answer"
+    ) in caplog.text
 
 
-def test_reflect_malformed_score_defaults_to_half():
-    with patch(
-        "jarvis.agent.nodes.reflect.llm.chat",
-        return_value=AIMessage(content="I cannot score this."),
-    ):
-        from jarvis.agent.nodes.reflect import reflect
-        result = reflect(_base_state())
+def test_reflect_malformed_score_defaults_to_half(caplog):
+    with caplog.at_level(logging.WARNING, logger="jarvis.agent.nodes.reflect"):
+        with patch(
+            "jarvis.agent.nodes.reflect.llm.chat",
+            return_value=AIMessage(content="I cannot score this."),
+        ):
+            from jarvis.agent.nodes.reflect import reflect
+            result = reflect(_base_state())
 
     assert result["reflection_score"] == pytest.approx(0.5)
+    assert (
+        "【节点:reflect】【状态:解析失败】【默认评分:0.50】 "
+        "Could not parse reflection score"
+    ) in caplog.text
+    assert "I cannot score this." not in caplog.text

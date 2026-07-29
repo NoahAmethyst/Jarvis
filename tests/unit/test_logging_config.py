@@ -6,6 +6,7 @@ from jarvis.logging_config import (
     ColorLevelFormatter,
     HealthCheckAccessFilter,
     configure_logging,
+    format_log_tags,
 )
 
 
@@ -87,3 +88,36 @@ def test_configure_logging_attaches_health_access_filter():
     finally:
         root.handlers = previous_handlers
         root.setLevel(previous_level)
+
+
+def test_format_log_tags_preserves_field_order():
+    assert format_log_tags(
+        ("供应商", "deepseek"),
+        ("模型", "deepseek-v4-pro"),
+        ("结果", "成功"),
+    ) == "【供应商:deepseek】【模型:deepseek-v4-pro】【结果:成功】"
+
+
+def test_format_log_tags_keeps_each_tag_on_one_safe_line():
+    assert format_log_tags(
+        ("节点", "rag_retrieve\nforged"),
+        ("组件", "Qdrant】extra【"),
+    ) == "【节点:rag_retrieve forged】【组件:Qdrant)extra(】"
+
+
+def test_format_log_tags_removes_terminal_and_unicode_control_characters():
+    rendered = format_log_tags(
+        ("模型", "safe\tforged\x1b[31m\u2028next\u2029end"),
+    )
+
+    assert rendered == "【模型:safe forged [31m next end】"
+    assert "\t" not in rendered
+    assert "\x1b" not in rendered
+    assert "\u2028" not in rendered
+    assert "\u2029" not in rendered
+
+
+def test_format_log_tags_bounds_each_name_and_value():
+    rendered = format_log_tags(("x" * 200, "y" * 200))
+
+    assert rendered == f"【{'x' * 160}:{'y' * 160}】"

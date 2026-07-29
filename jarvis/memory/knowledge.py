@@ -9,6 +9,7 @@ from jarvis.config import (
     SILICONFLOW_API_KEY, SILICONFLOW_BASE_URL,
 )
 from jarvis.llm.errors import LLMConfigurationError, LLMCredentialError
+from jarvis.logging_config import format_log_tags
 
 logger = logging.getLogger(__name__)
 COLLECTION_NAME = "jarvis_knowledge"
@@ -65,7 +66,14 @@ def init_collection():
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
-    logger.info("Qdrant collection ready: %s", COLLECTION_NAME)
+    logger.info(
+        "%s Knowledge collection initialized",
+        format_log_tags(
+            ("组件", "Qdrant"),
+            ("集合", COLLECTION_NAME),
+            ("状态", "就绪"),
+        ),
+    )
 
 
 def store_knowledge(text: str, source_url: str, user_id: str):

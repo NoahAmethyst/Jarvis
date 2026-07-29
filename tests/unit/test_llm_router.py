@@ -1,3 +1,4 @@
+import logging
 import pytest
 from unittest.mock import patch, MagicMock
 from jarvis.llm.router import get_model, ProviderNotFoundError, ProviderUnavailableError
@@ -15,15 +16,23 @@ def test_get_model_invalid_format():
     assert str(exc_info.value) == "provider not exist"
 
 
-def test_get_model_provider_unavailable():
-    with patch("jarvis.llm.router.REGISTRY") as mock_registry:
-        mock_provider = MagicMock()
-        mock_provider.get_chat_model.side_effect = Exception("connection refused")
-        mock_registry.__contains__ = MagicMock(return_value=True)
-        mock_registry.__getitem__ = MagicMock(return_value=mock_provider)
-        with pytest.raises(ProviderUnavailableError) as exc_info:
-            get_model("siliconflow/some-model")
-        assert "provider not working:connection refused" in str(exc_info.value)
+def test_get_model_provider_unavailable(caplog):
+    with caplog.at_level(logging.ERROR, logger="jarvis.llm.router"):
+        with patch("jarvis.llm.router.REGISTRY") as mock_registry:
+            mock_provider = MagicMock()
+            mock_provider.get_chat_model.side_effect = Exception(
+                "secret-provider-detail"
+            )
+            mock_registry.__contains__ = MagicMock(return_value=True)
+            mock_registry.__getitem__ = MagicMock(return_value=mock_provider)
+            with pytest.raises(ProviderUnavailableError):
+                get_model("siliconflow/some-model")
+
+    assert (
+        "【组件:LLM路由】【供应商:siliconflow】【模型:some-model】"
+        "【结果:失败】【错误:Exception】 Provider unavailable"
+    ) in caplog.text
+    assert "secret-provider-detail" not in caplog.text
 
 
 def test_get_model_siliconflow_returns_chat_model():
