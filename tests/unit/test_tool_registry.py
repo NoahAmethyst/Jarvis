@@ -7,8 +7,15 @@ from jarvis.tools.registry import (
 )
 
 
-def setup_function():
+@pytest.fixture(autouse=True)
+def preserve_tool_registry():
+    original = _REGISTRY.copy()
     _REGISTRY.clear()
+    try:
+        yield
+    finally:
+        _REGISTRY.clear()
+        _REGISTRY.update(original)
 
 
 def test_register_tool_adds_to_registry():

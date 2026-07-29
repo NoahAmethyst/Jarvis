@@ -78,14 +78,20 @@ HTTP 服务默认监听 `0.0.0.0:8080`，gRPC 使用明文监听 `[::]:9090`，�
 绑定 localhost。当前应用没有鉴权或 TLS；启动前应通过防火墙、私网或可信
 反向代理隔离访问。
 
-## 启动连通性检查
+## 启动配置与连通性检查
 
-Jarvis 在绑定 HTTP/gRPC 端口前执行模型连通性检查：
+Jarvis 在绑定 HTTP/gRPC 端口前检查凭据配置并执行模型连通性检查：
 
+- 检查当前生效的 Chat、Embedding 及注册工具声明的 API Key 环境变量。已配置
+  使用 `INFO`，未配置使用 `WARNING`；日志只包含环境变量名称和状态，不包含值。
 - 扫描 `llm.yaml` 的 `profiles`，对每个实际引用的 Chat 供应商执行一次真实
-  模型请求；多个 Profile 引用同一供应商时只检查一次。
+  模型请求；多个 Profile 引用同一供应商时只检查一次。缺少对应凭据时跳过真实
+  请求，避免发送无效鉴权。
 - 对 `EMBED_MODEL` 指定的 Embedding 模型执行一次真实向量请求。默认配置因此
-  会检查 DeepSeek Chat 和 SiliconFlow Embedding。
+  会检查 DeepSeek Chat 和 SiliconFlow Embedding；缺少 Embedding 凭据时跳过
+  探测，聊天流程沿用现有的无 RAG 降级。
+- 工具只执行凭据存在性检查，不在启动阶段产生搜索等外部请求。缺少工具凭据时，
+  该工具不会提供给大模型，其余对话能力不受影响。
 - 单次探测使用 10 秒请求超时，Embedding 探测关闭 SDK 重试。探测会产生少量
   API 用量，并可能延迟端口开始监听。
 - 失败按 `credential`、`timeout`、`connectivity`、`configuration` 等稳定类别
@@ -117,8 +123,10 @@ NO_COLOR=1 python jarvis/main.py
 
 ```text
 【供应商:deepseek】【模型:deepseek-v4-pro】【类型:Chat】【结果:成功】 Startup connectivity check completed
+【组件:web_search】【类型:Tool】【配置:TAVILY_API_KEY】【状态:未配置】 Required credential is not configured
 【节点:agent_dispatch】【Agent:ai-agent-mentor】【评分:0.86】 Agent selected
 【节点:rag_retrieve】【组件:Qdrant】【状态:降级】【错误:ResponseHandlingException】 Retrieval unavailable
+【节点:tool_node】【工具:web_search】【状态:降级】【类别:credential】 Tool unavailable
 【服务:gRPC】【端口:9090】【状态:就绪】 Server listening
 ```
 
@@ -293,17 +301,25 @@ Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消�
 > 当前没有单工具禁用开关；关闭 `answer.tools` 会关闭全部工具。完整接入安全
 > 边界见 [`API.md`](API.md)。
 
-新增工具只需在 `jarvis/tools/` 下创建文件并使用 `@register_tool` 装饰器：
+新增工具只需在 `jarvis/tools/` 下创建文件并使用 `@register_tool` 装饰器。
+需要凭据的工具通过 `required_env_vars` 声明：
 
 ```python
 from jarvis.tools.registry import register_tool
 
-@register_tool(name="my_tool", description="工具描述")
+@register_tool(
+    name="my_tool",
+    description="工具描述",
+    required_env_vars=("MY_TOOL_API_KEY",),
+)
 def my_tool(input: str) -> str:
     return "结果"
 ```
 
 在 `jarvis/agent/graph.py` 顶部 import 该模块即可自动注册，无需修改图逻辑。
+未配置声明的环境变量时，工具会自动从模型能力列表中移除。外部工具运行时遇到
+鉴权失败、超时、连接失败或服务端 `5xx`，会记录脱敏 `WARNING`，在当前请求内
+禁用该工具并让大模型直接回答；无效参数和程序错误仍会抛出。
 
 ## 自定义 Agent
 
@@ -394,7 +410,7 @@ jarvis/
 ├── config.py              # 环境变量与默认配置
 ├── logging_config.py      # 彩色等级、关键标签与健康访问日志过滤
 ├── main.py                # 服务入口（并行启动 HTTP + gRPC）
-├── startup_checks.py      # 启动前 Chat Provider 与 Embedding 真实探测
+├── startup_checks.py      # 启动凭据审计及 Chat/Embedding 真实探测
 ├── llm/                   # Profile Gateway 与协议 Adapter
 │   ├── config.py          # llm.yaml 类型化加载
 │   ├── gateway.py         # 统一 chat、能力、裁剪、重试与错误归一化
@@ -402,7 +418,8 @@ jarvis/
 │   ├── adapters/          # DeepSeek / OpenAI-compatible / Anthropic
 │   └── router.py          # 仅保留旧 raw-model API 兼容
 ├── tools/
-│   ├── registry.py        # @register_tool 装饰器
+│   ├── registry.py        # 工具注册、凭据依赖与可用性过滤
+│   ├── errors.py          # 可安全降级的工具异常
 │   ├── search.py          # Tavily 搜索
 │   └── scraper.py         # BeautifulSoup 抓取
 ├── memory/
@@ -411,7 +428,7 @@ jarvis/
 ├── agent/
 │   ├── state.py           # AgentState TypedDict
 │   ├── graph.py           # LangGraph 图定义
-│   └── nodes/             # 6 个节点实现
+│   └── nodes/             # 节点实现（含请求级安全工具执行）
 ├── agents/
 │   ├── __init__.py        # AgentDefinition dataclass
 │   ├── loader.py          # 扫描目录，解析 agent.json/yaml/SKILL.md
