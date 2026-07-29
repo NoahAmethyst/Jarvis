@@ -1,5 +1,10 @@
 import pytest
-from jarvis.tools.registry import register_tool, get_tools, _REGISTRY
+from jarvis.tools import registry
+from jarvis.tools.registry import (
+    _REGISTRY,
+    get_tools,
+    register_tool,
+)
 
 
 def setup_function():
@@ -44,3 +49,48 @@ def test_multiple_tools_registered():
         return x
 
     assert len(get_tools()) == 2
+
+
+def test_tool_with_missing_requirement_is_filtered(monkeypatch):
+    monkeypatch.delenv("SEARCH_API_KEY", raising=False)
+
+    @register_tool(
+        name="search",
+        description="Search",
+        required_env_vars=("SEARCH_API_KEY",),
+    )
+    def search(query: str) -> str:
+        return query
+
+    assert get_tools() == []
+    assert registry.get_tool_registration("search").missing_env_vars() == (
+        "SEARCH_API_KEY",
+    )
+
+
+def test_tool_with_configured_requirement_is_available(monkeypatch):
+    monkeypatch.setenv("SEARCH_API_KEY", "configured")
+
+    @register_tool(
+        name="search",
+        description="Search",
+        required_env_vars=("SEARCH_API_KEY",),
+    )
+    def search(query: str) -> str:
+        return query
+
+    assert [tool.name for tool in get_tools()] == ["search"]
+
+
+def test_excluded_tool_is_filtered(monkeypatch):
+    monkeypatch.setenv("SEARCH_API_KEY", "configured")
+
+    @register_tool(
+        name="search",
+        description="Search",
+        required_env_vars=("SEARCH_API_KEY",),
+    )
+    def search(query: str) -> str:
+        return query
+
+    assert get_tools(excluded_names={"search"}) == []
