@@ -2,6 +2,7 @@ import logging
 from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import StructuredTool
 
 import jarvis.startup_checks as startup_checks
 from jarvis.llm.config import LLMSettings
@@ -18,6 +19,7 @@ from jarvis.startup_checks import (
     discover_active_chat_targets,
     run_model_startup_checks,
 )
+from jarvis.tools.registry import ToolRegistration
 
 
 class FakeModel:
@@ -238,7 +240,11 @@ def test_failure_categories_distinguish_timeout_connectivity_and_credential():
     assert startup_checks.failure_category(AuthenticationFailure()) == "credential"
 
 
-def test_startup_checks_continue_to_embedding_when_chat_config_fails(caplog):
+def test_startup_checks_continue_to_embedding_when_chat_config_fails(
+    monkeypatch,
+    caplog,
+):
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "configured")
     embeddings = FakeEmbeddings([0.1])
 
     def fail_to_load_settings():
@@ -280,3 +286,74 @@ def test_invalid_chat_config_is_reported_as_configuration(caplog):
         "Could not load active provider configuration"
     ) in caplog.text
     assert "secret-config-detail" not in caplog.text
+
+
+def test_credential_audit_logs_status_without_values(caplog):
+    def search(query: str) -> str:
+        return query
+
+    registration = ToolRegistration(
+        tool=StructuredTool.from_function(
+            search,
+            name="search",
+            description="Search",
+        ),
+        required_env_vars=("SEARCH_API_KEY",),
+    )
+    environ = {
+        "ALPHA_API_KEY": "secret-alpha",
+        "SILICONFLOW_API_KEY": "secret-embedding",
+    }
+
+    with caplog.at_level(logging.INFO, logger="jarvis.startup_checks"):
+        missing = startup_checks.check_required_credentials(
+            _settings(),
+            "siliconflow/embedding-model",
+            tool_registrations=[registration],
+            environ=environ,
+        )
+
+    assert missing == {"BETA_API_KEY", "SEARCH_API_KEY"}
+    assert (
+        "【组件:alpha】【类型:Chat】【配置:ALPHA_API_KEY】【状态:已配置】"
+        " Required credential is configured"
+    ) in caplog.text
+    assert (
+        "【组件:beta】【类型:Chat】【配置:BETA_API_KEY】【状态:未配置】"
+        " Required credential is not configured"
+    ) in caplog.text
+    assert (
+        "【组件:search】【类型:Tool】【配置:SEARCH_API_KEY】【状态:未配置】"
+        " Required credential is not configured"
+    ) in caplog.text
+    assert "secret-alpha" not in caplog.text
+    assert "secret-embedding" not in caplog.text
+
+
+def test_missing_chat_credentials_skip_connectivity_probes():
+    model = FakeModel(AIMessage(content="OK"))
+    adapter = FakeAdapter(model)
+
+    check_chat_providers(
+        _settings(),
+        adapters={
+            "deepseek": adapter,
+            "openai_compatible": adapter,
+        },
+        missing_env_vars={"ALPHA_API_KEY", "BETA_API_KEY"},
+    )
+
+    assert adapter.calls == []
+    assert model.calls == []
+
+
+def test_missing_embedding_credential_skips_client_creation():
+    embeddings_factory = MagicMock()
+
+    check_embedding_model(
+        "siliconflow/embedding-model",
+        embeddings_factory=embeddings_factory,
+        missing_env_vars={"SILICONFLOW_API_KEY"},
+    )
+
+    embeddings_factory.assert_not_called()
