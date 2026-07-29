@@ -1,4 +1,5 @@
 import pytest
+from qdrant_client import QdrantClient
 from unittest.mock import patch, MagicMock
 
 
@@ -6,11 +7,11 @@ def test_store_and_retrieve_knowledge():
     mock_embeddings = MagicMock()
     mock_embeddings.embed_query.return_value = [0.1] * 4096
 
-    mock_client = MagicMock()
+    mock_client = MagicMock(spec=QdrantClient)
     mock_client.get_collections.return_value.collections = []
     mock_result = MagicMock()
     mock_result.payload = {"text": "Paris is the capital of France."}
-    mock_client.search.return_value = [mock_result]
+    mock_client.query_points.return_value.points = [mock_result]
 
     with patch("jarvis.memory.knowledge._get_embeddings", return_value=mock_embeddings), \
          patch("jarvis.memory.knowledge._get_client", return_value=mock_client):
@@ -21,4 +22,4 @@ def test_store_and_retrieve_knowledge():
 
     assert "Paris" in result
     mock_client.upsert.assert_called_once()
-    mock_client.search.assert_called_once()
+    mock_client.query_points.assert_called_once()

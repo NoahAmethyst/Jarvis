@@ -157,6 +157,8 @@ Thresholds come from:
   - Collection name: `jarvis_knowledge`.
   - Uses `OpenAIEmbeddings`; SiliconFlow embeddings are supported by OpenAI
     compatible base URL.
+  - Uses Qdrant's `query_points` API and reads matches from
+    `QueryResponse.points`; the supported client range is `>=1.18,<2.0`.
   - Point IDs hash an unescaped colon-joined `user_id`, source, and text value,
     then truncate it to 63 bits. Different field tuples can collide at
     delimiters (or by hash truncation), and Qdrant upsert will overwrite that

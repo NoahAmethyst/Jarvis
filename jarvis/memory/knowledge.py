@@ -101,14 +101,15 @@ def retrieve_knowledge(query: str, user_id: str, top_k: int = 5) -> str:
     embeddings = _get_embeddings()
     vector = embeddings.embed_query(query)
     client = _get_client()
-    results = client.search(
+    response = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_vector=vector,
+        query=vector,
         query_filter=Filter(
             must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
         ),
         limit=top_k,
     )
+    results = response.points
     if not results:
         return ""
     return "\n\n---\n\n".join(r.payload["text"] for r in results)
