@@ -1,5 +1,4 @@
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
 from jarvis.agent.state import AgentState
 from jarvis.agent.nodes.memory_load import memory_load
 from jarvis.agent.nodes.agent_dispatch import agent_dispatch
@@ -7,14 +6,12 @@ from jarvis.agent.nodes.rag_retrieve import rag_retrieve
 from jarvis.agent.nodes.plan_and_call import plan_and_call
 from jarvis.agent.nodes.reflect import reflect
 from jarvis.agent.nodes.memory_write import memory_write
+from jarvis.agent.nodes.tool_execute import execute_tools
 from jarvis.config import REFLECTION_SCORE_THRESHOLD, REFLECTION_MAX_RETRIES
 from langchain_core.messages import AIMessage
 
 import jarvis.tools.search  # noqa: F401 — registers web_search
 import jarvis.tools.scraper  # noqa: F401 — registers web_scrape
-
-from jarvis.tools.registry import get_tools
-
 
 def _route_after_plan(state: AgentState) -> str:
     last = state["messages"][-1]
@@ -38,7 +35,7 @@ builder.add_node("memory_load", memory_load)
 builder.add_node("agent_dispatch", agent_dispatch)
 builder.add_node("rag_retrieve", rag_retrieve)
 builder.add_node("plan_and_call", plan_and_call)
-builder.add_node("tool_node", ToolNode(get_tools()))
+builder.add_node("tool_node", execute_tools)
 builder.add_node("reflect", reflect)
 builder.add_node("memory_write", memory_write)
 

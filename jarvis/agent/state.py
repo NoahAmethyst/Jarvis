@@ -19,3 +19,4 @@ class AgentState(TypedDict):
     reflect_llm_override: Optional[str]
     active_agent: Optional[AgentDefinition]
     agent_dispatch_score: float
+    unavailable_tools: list[str]

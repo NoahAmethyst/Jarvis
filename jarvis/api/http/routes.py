@@ -82,6 +82,7 @@ def chat(req: ChatRequest):
         "reflect_llm_override": req.reflect_llm,
         "active_agent": None,
         "agent_dispatch_score": 0.0,
+        "unavailable_tools": [],
     }
     try:
         result = graph.invoke(initial_state)

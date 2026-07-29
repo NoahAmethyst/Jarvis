@@ -12,10 +12,13 @@ def plan_and_call(state: AgentState) -> dict:
         system_content += f"\n\n{state['active_agent'].instructions}"
 
     all_messages = [SystemMessage(content=system_content)] + state["history"] + state["messages"]
+    tools = get_tools(
+        excluded_names=state.get("unavailable_tools", [])
+    )
     response = llm.chat(
         profile="answer",
         messages=all_messages,
-        tools=get_tools(),
+        tools=tools,
         override=state.get("llm_override"),
     )
     return {"messages": [response]}
