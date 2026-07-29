@@ -17,6 +17,10 @@ Jarvis will expose two schema-hidden endpoints:
   startup storage and gRPC initialization complete, then HTTP 200 with
   `{"status": "ready"}`.
 
+Both handlers are asynchronous and perform only in-memory reads, so they remain
+responsive even when synchronous business requests occupy the AnyIO worker
+thread pool.
+
 The readiness flag lives on `app.state`. `serve()` resets it to false before
 startup work and sets it true only after storage initialization and gRPC server
 startup, immediately before creating the HTTP server.

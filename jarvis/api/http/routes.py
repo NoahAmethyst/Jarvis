@@ -17,6 +17,7 @@ from jarvis.memory import knowledge as know_mem
 from langchain_core.messages import HumanMessage
 
 app = FastAPI(title="Jarvis", version="0.1.0")
+app.state.ready = False
 
 
 class ChatRequest(BaseModel):
@@ -35,6 +36,18 @@ class IngestRequest(BaseModel):
     content: str
     source_url: str
     user_id: str
+
+
+@app.get("/health/live", include_in_schema=False)
+async def health_live():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", include_in_schema=False)
+async def health_ready():
+    if not app.state.ready:
+        raise HTTPException(status_code=503, detail="not ready")
+    return {"status": "ready"}
 
 
 def _llm_http_status(error: LLMError) -> int:

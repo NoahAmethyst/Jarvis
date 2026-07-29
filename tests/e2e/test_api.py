@@ -1,3 +1,5 @@
+import inspect
+
 import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
@@ -38,6 +40,38 @@ def test_chat_returns_answer(client):
     data = resp.json()
     assert data["answer"] == "Paris is the capital of France."
     assert data["low_confidence"] is False
+
+
+def test_liveness_is_available(client):
+    response = client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_readiness_is_unavailable_before_startup(client):
+    client.app.state.ready = False
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "not ready"}
+
+
+def test_readiness_is_available_after_startup(client):
+    client.app.state.ready = True
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_health_handlers_run_on_event_loop():
+    from jarvis.api.http.routes import health_live, health_ready
+
+    assert inspect.iscoroutinefunction(health_live)
+    assert inspect.iscoroutinefunction(health_ready)
 
 
 def test_chat_missing_user_id_returns_422(client):

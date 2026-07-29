@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
+    app.state.ready = False
     configure_logging()
     try:
         run_model_startup_checks()
@@ -26,6 +27,7 @@ async def serve():
     grpc_server = await create_grpc_server()
     await grpc_server.start()
     logger.info("gRPC server listening on :%d", GRPC_PORT)
+    app.state.ready = True
 
     config = uvicorn.Config(
         app,

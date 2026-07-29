@@ -4,6 +4,7 @@ import os
 
 
 LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
+HEALTH_CHECK_PATHS = frozenset({"/health/live", "/health/ready"})
 RESET = "\x1b[0m"
 LEVEL_LABELS = {
     logging.INFO: "INFO",
@@ -31,9 +32,19 @@ class ColorLevelFormatter(logging.Formatter):
         return super().format(formatted_record)
 
 
+class HealthCheckAccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != "uvicorn.access":
+            return True
+        if not isinstance(record.args, tuple) or len(record.args) < 3:
+            return True
+        return record.args[2] not in HEALTH_CHECK_PATHS
+
+
 def configure_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(ColorLevelFormatter(LOG_FORMAT))
+    handler.addFilter(HealthCheckAccessFilter())
 
     root = logging.getLogger()
     root.handlers.clear()

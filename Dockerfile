@@ -42,7 +42,7 @@ USER jarvis
 EXPOSE 8080 9090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/docs')" \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health/live')" \
     || exit 1
 
 CMD ["python", "jarvis/main.py"]

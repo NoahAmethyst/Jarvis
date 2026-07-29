@@ -57,8 +57,9 @@ JARVIS_GRPC_TARGET=localhost:9090
   `^[A-Za-z0-9._:@-]+$`，并继续对 path 参数进行 URL 编码。
 - 应用本身没有配置 CORS 中间件。浏览器跨域直连需要由反向代理提供同源转发，
   或在服务端明确增加 CORS 策略。
-- HTTP 没有业务健康检查接口。FastAPI 默认提供 `/docs`、`/redoc` 和
-  `/openapi.json`，但这些地址不应作为生产健康检查。
+- HTTP 提供 `/health/live` 和 `/health/ready` 两个专用健康接口。
+  健康探针不得使用 `/docs`，也不得在周期探测中调用 LLM、数据库、
+  Qdrant 或其他外部服务。
 - gRPC 当前使用明文监听，且没有启用 Server Reflection。生产环境的 TLS 和
   访问控制应由部署层提供。
 - HTTP 字段目前没有长度限制，应用层也没有请求体、频率或并发限制。公网接入
@@ -88,10 +89,15 @@ Schema 是空对象，业务错误状态也未声明。生成客户端后必须�
 
 | 方法 | 路径 | 用途 | 成功状态 |
 |---|---|---|---|
+| `GET` | `/health/live` | 进程存活检查，不访问外部依赖 | `200` |
+| `GET` | `/health/ready` | 启动初始化完成检查 | `200` |
 | `POST` | `/chat` | 发起一次对话 | `200` |
 | `POST` | `/ingest` | 写入用户私有知识 | `200` |
 | `GET` | `/memory/{uid}` | 获取用户对话历史 | `200` |
 | `DELETE` | `/memory/{uid}` | 删除用户对话历史 | `200` |
+
+`/health/ready` 在启动初始化完成前返回 `503 {"detail":"not ready"}`。
+两个健康接口都不访问 LLM、PostgreSQL、Qdrant 或其他外部依赖。
 
 ### 3.3 POST `/chat`
 
