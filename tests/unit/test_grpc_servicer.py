@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import patch
 
 import grpc
@@ -74,6 +75,25 @@ def test_grpc_chat_success_preserves_response_shape():
     assert response.answer == "hi"
     assert response.low_confidence is False
     assert context.code is None
+
+
+def test_grpc_chat_logs_unexpected_errors_and_returns_internal(caplog):
+    context = FakeContext()
+    request = jarvis_pb2.ChatRequest(message="hello", user_id="u1")
+
+    with caplog.at_level(logging.ERROR, logger="jarvis.api.grpc.servicer"):
+        with patch(
+            "jarvis.api.grpc.servicer.graph.invoke",
+            side_effect=RuntimeError("secret-response-body"),
+        ):
+            response = JarvisServicer().Chat(request, context)
+
+    assert response.answer == ""
+    assert context.code == grpc.StatusCode.INTERNAL
+    assert context.details == "internal Jarvis Chat error"
+    assert "【方法:Chat】【结果:失败】【错误:RuntimeError】" in caplog.text
+    assert "Unexpected gRPC request failure" in caplog.text
+    assert "secret-response-body" not in caplog.text
 
 
 def test_grpc_missing_llm_config_maps_failed_precondition(monkeypatch, tmp_path):

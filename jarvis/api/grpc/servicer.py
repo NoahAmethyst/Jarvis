@@ -1,3 +1,6 @@
+import logging
+import traceback
+
 import grpc
 from jarvis.api.grpc import jarvis_pb2, jarvis_pb2_grpc
 from jarvis.agent.graph import graph
@@ -12,9 +15,21 @@ from jarvis.llm.errors import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
+from jarvis.logging_config import format_log_tags
 from jarvis.memory import conversation as conv_mem
 from jarvis.memory import knowledge as know_mem
 from langchain_core.messages import HumanMessage
+
+
+logger = logging.getLogger(__name__)
+
+
+def _error_location(error: Exception) -> str:
+    traceback_frames = traceback.extract_tb(error.__traceback__)
+    if not traceback_frames:
+        return "unknown"
+    frame = traceback_frames[-1]
+    return f"{frame.filename}:{frame.lineno}"
 
 
 def _llm_grpc_status(error: LLMError):
@@ -57,6 +72,19 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
         except LLMError as error:
             context.set_code(_llm_grpc_status(error))
             context.set_details(str(error))
+            return jarvis_pb2.ChatResponse()
+        except Exception as error:
+            logger.error(
+                "%s Unexpected gRPC request failure",
+                format_log_tags(
+                    ("方法", "Chat"),
+                    ("结果", "失败"),
+                    ("错误", type(error).__name__),
+                    ("位置", _error_location(error)),
+                ),
+            )
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("internal Jarvis Chat error")
             return jarvis_pb2.ChatResponse()
         return jarvis_pb2.ChatResponse(
             answer=result["final_answer"],
