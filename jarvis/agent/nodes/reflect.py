@@ -17,21 +17,32 @@ def _extract_last_ai_answer(state: AgentState) -> str:
 
 
 def reflect(state: AgentState) -> dict:
-    answer = _extract_last_ai_answer(state)
+    try:
+        answer = _extract_last_ai_answer(state)
 
-    prompt = (
-        f"Rate this answer from 0.0 to 1.0 based on accuracy, completeness, "
-        f"and whether it directly answers the question.\n\n"
-        f"Question: {state['query']}\n"
-        f"Answer: {answer}\n\n"
-        f"Respond with ONLY a decimal number between 0.0 and 1.0."
-    )
-    response = llm.chat(
-        profile="reflection",
-        messages=[HumanMessage(content=prompt)],
-        tools=None,
-        override=state.get("reflect_llm_override"),
-    )
+        prompt = (
+            f"Rate this answer from 0.0 to 1.0 based on accuracy, completeness, "
+            f"and whether it directly answers the question.\n\n"
+            f"Question: {state['query']}\n"
+            f"Answer: {answer}\n\n"
+            f"Respond with ONLY a decimal number between 0.0 and 1.0."
+        )
+        response = llm.chat(
+            profile="reflection",
+            messages=[HumanMessage(content=prompt)],
+            tools=None,
+            override=state.get("reflect_llm_override"),
+        )
+    except Exception as error:
+        logger.error(
+            "%s Reflection node failed",
+            format_log_tags(
+                ("节点", "reflect"),
+                ("状态", "失败"),
+                ("错误", type(error).__name__),
+            ),
+        )
+        raise
 
     match = re.search(r"\d+\.?\d*", response.content)
     try:

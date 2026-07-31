@@ -67,15 +67,22 @@ def test_tool_outage_returns_message_and_disables_tool(caplog):
     ) in caplog.text
 
 
-def test_unexpected_tool_bug_propagates():
+def test_unexpected_tool_bug_logs_and_propagates(caplog):
     @register_tool(name="broken", description="Broken")
     def broken(value: str) -> str:
         raise ValueError("programming bug")
 
-    with pytest.raises(ValueError, match="programming bug"):
-        _execute_tools(
-            _tool_call_state("broken", {"value": "x"})
-        )
+    with caplog.at_level(logging.ERROR, logger="jarvis.agent.nodes.tool_execute"):
+        with pytest.raises(ValueError, match="programming bug"):
+            _execute_tools(
+                _tool_call_state("broken", {"value": "x"})
+            )
+
+    assert (
+        "【节点:tool_node】【工具:broken】【状态:失败】"
+        "【错误:ValueError】 Tool execution failed"
+    ) in caplog.text
+    assert "programming bug" not in caplog.text
 
 
 def test_successful_and_unavailable_tools_return_independent_results():

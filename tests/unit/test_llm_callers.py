@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -64,6 +65,25 @@ def test_plan_and_call_uses_answer_profile():
     ]
 
 
+def test_plan_and_call_logs_and_reraises_unexpected_errors(caplog):
+    from jarvis.agent.nodes import plan_and_call as module
+
+    with caplog.at_level(logging.ERROR, logger="jarvis.agent.nodes.plan_and_call"):
+        with patch.object(
+            module.llm,
+            "chat",
+            side_effect=RuntimeError("secret-answer-detail"),
+        ):
+            with pytest.raises(RuntimeError, match="secret-answer-detail"):
+                module.plan_and_call(_state())
+
+    assert (
+        "【节点:plan_and_call】【状态:失败】【错误:RuntimeError】"
+    ) in caplog.text
+    assert "Answer node failed" in caplog.text
+    assert "secret-answer-detail" not in caplog.text
+
+
 def test_reflect_uses_reflection_profile():
     from jarvis.agent.nodes import reflect as module
 
@@ -88,6 +108,30 @@ def test_reflect_uses_reflection_profile():
     assert call["tools"] is None
     assert len(call["messages"]) == 1
     assert isinstance(call["messages"][0], HumanMessage)
+
+
+def test_reflect_logs_and_reraises_unexpected_errors(caplog):
+    from jarvis.agent.nodes import reflect as module
+
+    state = _state(
+        messages=[
+            HumanMessage(content="current question"),
+            AIMessage(content="current answer"),
+        ],
+        retry_count=0,
+    )
+    with caplog.at_level(logging.ERROR, logger="jarvis.agent.nodes.reflect"):
+        with patch.object(
+            module.llm,
+            "chat",
+            side_effect=RuntimeError("secret-reflection-detail"),
+        ):
+            with pytest.raises(RuntimeError, match="secret-reflection-detail"):
+                module.reflect(state)
+
+    assert "【节点:reflect】【状态:失败】【错误:RuntimeError】" in caplog.text
+    assert "Reflection node failed" in caplog.text
+    assert "secret-reflection-detail" not in caplog.text
 
 
 def test_dispatch_agent_uses_agent_dispatch_profile_for_each_agent():
