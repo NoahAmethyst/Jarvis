@@ -5,7 +5,7 @@ import warnings
 
 from jarvis.api.grpc import jarvis_pb2 as jarvis__pb2
 
-GRPC_GENERATED_VERSION = '1.80.0'
+GRPC_GENERATED_VERSION = '1.83.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class JarvisServiceStub(object):
+class JarvisServiceStub:
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -38,6 +38,11 @@ class JarvisServiceStub(object):
                 '/jarvis.JarvisService/Chat',
                 request_serializer=jarvis__pb2.ChatRequest.SerializeToString,
                 response_deserializer=jarvis__pb2.ChatResponse.FromString,
+                _registered_method=True)
+        self.Generate = channel.unary_unary(
+                '/jarvis.JarvisService/Generate',
+                request_serializer=jarvis__pb2.GenerateRequest.SerializeToString,
+                response_deserializer=jarvis__pb2.GenerateResponse.FromString,
                 _registered_method=True)
         self.Ingest = channel.unary_unary(
                 '/jarvis.JarvisService/Ingest',
@@ -56,10 +61,16 @@ class JarvisServiceStub(object):
                 _registered_method=True)
 
 
-class JarvisServiceServicer(object):
+class JarvisServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def Chat(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Generate(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -91,6 +102,11 @@ def add_JarvisServiceServicer_to_server(servicer, server):
                     request_deserializer=jarvis__pb2.ChatRequest.FromString,
                     response_serializer=jarvis__pb2.ChatResponse.SerializeToString,
             ),
+            'Generate': grpc.unary_unary_rpc_method_handler(
+                    servicer.Generate,
+                    request_deserializer=jarvis__pb2.GenerateRequest.FromString,
+                    response_serializer=jarvis__pb2.GenerateResponse.SerializeToString,
+            ),
             'Ingest': grpc.unary_unary_rpc_method_handler(
                     servicer.Ingest,
                     request_deserializer=jarvis__pb2.IngestRequest.FromString,
@@ -114,7 +130,7 @@ def add_JarvisServiceServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class JarvisService(object):
+class JarvisService:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -134,6 +150,33 @@ class JarvisService(object):
             '/jarvis.JarvisService/Chat',
             jarvis__pb2.ChatRequest.SerializeToString,
             jarvis__pb2.ChatResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Generate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/jarvis.JarvisService/Generate',
+            jarvis__pb2.GenerateRequest.SerializeToString,
+            jarvis__pb2.GenerateResponse.FromString,
             options,
             channel_credentials,
             insecure,

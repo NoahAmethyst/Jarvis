@@ -4,6 +4,7 @@ package jarvis;
 
 service JarvisService {
   rpc Chat(ChatRequest) returns (ChatResponse);
+  rpc Generate(GenerateRequest) returns (GenerateResponse);
   rpc Ingest(IngestRequest) returns (IngestResponse);
   rpc GetMemory(MemoryRequest) returns (MemoryResponse);
   rpc DeleteMemory(MemoryRequest) returns (DeleteResponse);
@@ -19,6 +20,17 @@ message ChatRequest {
 message ChatResponse {
   string answer = 1;
   bool low_confidence = 2;
+}
+
+message GenerateRequest {
+  string prompt = 1;
+  string user_id = 2;
+  string llm = 3;
+  string operation = 4;
+}
+
+message GenerateResponse {
+  string text = 1;
 }
 
 message IngestRequest {

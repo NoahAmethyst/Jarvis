@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import grpc
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from jarvis.api.grpc import jarvis_pb2
 from jarvis.api.grpc.servicer import JarvisServicer
@@ -123,3 +123,55 @@ def test_grpc_missing_llm_config_maps_failed_precondition(monkeypatch, tmp_path)
     assert context.code == grpc.StatusCode.FAILED_PRECONDITION
     assert context.details == "LLM configuration is invalid"
     assert "secret-path" not in context.details
+
+
+def test_grpc_generate_uses_single_llm_call_without_conversation_memory():
+    context = FakeContext()
+    request = jarvis_pb2.GenerateRequest(
+        prompt="return exactly five chapter markers",
+        user_id="go-cqhttp:wallstreet",
+        llm="openai/gpt-4o",
+        operation="wallstreet_summary_v2",
+    )
+
+    with patch("jarvis.api.grpc.servicer.graph.invoke") as graph_invoke, patch(
+        "jarvis.api.grpc.servicer.conv_mem.load_history"
+    ) as load_history, patch(
+        "jarvis.api.grpc.servicer.conv_mem.save_message"
+    ) as save_message, patch(
+        "jarvis.api.grpc.servicer.llm.chat",
+        return_value=AIMessage(content="<<<CHAPTER_1>>>\ncontent"),
+    ) as chat:
+        response = JarvisServicer().Generate(request, context)
+
+    assert response.text == "<<<CHAPTER_1>>>\ncontent"
+    assert context.code is None
+    graph_invoke.assert_not_called()
+    load_history.assert_not_called()
+    save_message.assert_not_called()
+    call = chat.call_args.kwargs
+    assert call["profile"] == "answer"
+    assert call["tools"] is None
+    assert call["override"] == "openai/gpt-4o"
+    assert [message.content for message in call["messages"]] == [
+        "return exactly five chapter markers"
+    ]
+
+
+def test_grpc_generate_maps_llm_errors():
+    context = FakeContext()
+    request = jarvis_pb2.GenerateRequest(
+        prompt="return exactly five chapter markers",
+        user_id="go-cqhttp:wallstreet",
+        operation="wallstreet_summary_v2",
+    )
+
+    with patch(
+        "jarvis.api.grpc.servicer.llm.chat",
+        side_effect=LLMInvalidRequestError("invalid LLM request"),
+    ):
+        response = JarvisServicer().Generate(request, context)
+
+    assert response.text == ""
+    assert context.code == grpc.StatusCode.INVALID_ARGUMENT
+    assert context.details == "invalid LLM request"

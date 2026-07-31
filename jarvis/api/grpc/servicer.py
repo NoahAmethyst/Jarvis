@@ -15,6 +15,7 @@ from jarvis.llm.errors import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
+from jarvis.llm import llm
 from jarvis.logging_config import format_log_tags
 from jarvis.memory import conversation as conv_mem
 from jarvis.memory import knowledge as know_mem
@@ -90,6 +91,34 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             answer=result["final_answer"],
             low_confidence=result["low_confidence"],
         )
+
+    def Generate(self, request, context):
+        try:
+            response = llm.chat(
+                profile="answer",
+                messages=[HumanMessage(content=request.prompt)],
+                tools=None,
+                override=request.llm or None,
+            )
+        except LLMError as error:
+            context.set_code(_llm_grpc_status(error))
+            context.set_details(str(error))
+            return jarvis_pb2.GenerateResponse()
+        except Exception as error:
+            logger.error(
+                "%s Unexpected gRPC request failure",
+                format_log_tags(
+                    ("方法", "Generate"),
+                    ("操作", request.operation or "unspecified"),
+                    ("结果", "失败"),
+                    ("错误", type(error).__name__),
+                    ("位置", _error_location(error)),
+                ),
+            )
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("internal Jarvis Generate error")
+            return jarvis_pb2.GenerateResponse()
+        return jarvis_pb2.GenerateResponse(text=response.content)
 
     def Ingest(self, request, context):
         try:

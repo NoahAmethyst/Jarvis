@@ -11,7 +11,7 @@ Jarvis 同时提供 HTTP 和 gRPC 两套同步接口：
 | 协议 | 本机客户端示例 | 服务默认监听 | 接口 |
 |---|---|---|---|
 | HTTP | `http://localhost:8080` | `0.0.0.0:8080` | `/chat`、`/ingest`、`/memory/{uid}` |
-| gRPC | `localhost:9090` | `[::]:9090` | `Chat`、`Ingest`、`GetMemory`、`DeleteMemory` |
+| gRPC | `localhost:9090` | `[::]:9090` | `Chat`、`Generate`、`Ingest`、`GetMemory`、`DeleteMemory` |
 
 `localhost` 只是同机客户端示例，不代表服务只监听 loopback。默认进程绑定
 全网卡，仓库中的 Kubernetes Service 还使用 NodePort；在没有应用鉴权和 TLS
@@ -48,6 +48,9 @@ JARVIS_GRPC_TARGET=localhost:9090
   WebSocket、流式 Token 或流式 gRPC。
 - `/chat` 可能执行 RAG、工具调用和最多多轮回答反思，客户端应使用可配置且
   明显长于普通 REST 请求的超时，不要使用过短的默认超时。
+- gRPC `Generate` 是一次性生成接口，不加载或写入 PostgreSQL 对话历史，也不
+  进入 LangGraph 反思、工具调用或 RAG 流程。需要严格机器可解析输出的调用方
+  应优先使用 `Generate`，避免被历史对话格式污染。
 - 当前应用层没有 API Key、JWT、Session 或租户鉴权。
 - `user_id` 直接决定对话历史和知识数据的隔离范围。调用方必须生成稳定、
   不可由其他用户任意冒用的标识，并在对外暴露 Jarvis 前通过网关补充鉴权和
@@ -392,6 +395,7 @@ jarvis.JarvisService
 | RPC | 请求 | 响应 | HTTP 对应接口 |
 |---|---|---|---|
 | `Chat` | `ChatRequest` | `ChatResponse` | `POST /chat` |
+| `Generate` | `GenerateRequest` | `GenerateResponse` | 无 |
 | `Ingest` | `IngestRequest` | `IngestResponse` | `POST /ingest` |
 | `GetMemory` | `MemoryRequest` | `MemoryResponse` | `GET /memory/{uid}` |
 | `DeleteMemory` | `MemoryRequest` | `DeleteResponse` | `DELETE /memory/{uid}` |
@@ -405,6 +409,7 @@ package jarvis;
 
 service JarvisService {
   rpc Chat(ChatRequest) returns (ChatResponse);
+  rpc Generate(GenerateRequest) returns (GenerateResponse);
   rpc Ingest(IngestRequest) returns (IngestResponse);
   rpc GetMemory(MemoryRequest) returns (MemoryResponse);
   rpc DeleteMemory(MemoryRequest) returns (DeleteResponse);
@@ -420,6 +425,17 @@ message ChatRequest {
 message ChatResponse {
   string answer = 1;
   bool low_confidence = 2;
+}
+
+message GenerateRequest {
+  string prompt = 1;
+  string user_id = 2;
+  string llm = 3;
+  string operation = 4;
+}
+
+message GenerateResponse {
+  string text = 1;
 }
 
 message IngestRequest {
@@ -451,9 +467,14 @@ message DeleteResponse {
 }
 ```
 
+`Generate` 只执行一次 `answer` Profile LLM 调用，`prompt` 作为唯一用户消息
+发送，`llm` 可按 `provider/model_id` 覆盖模型，`operation` 只用于服务端日志
+定位，不会传入模型。该 RPC 不加载、不保存 conversation history，也不使用
+知识库或工具；适合日报章节、结构化 JSON、固定 marker 等机器可解析输出。
+
 `proto3` 的未设置字符串字段在服务端表现为空字符串。虽然协议层不会报告
-“缺少必填字段”，客户端仍应保证 `message`、`user_id`、`content` 和
-`source_url` 等业务必填值非空。
+“缺少必填字段”，客户端仍应保证 `message`、`prompt`、`user_id`、`content`
+和 `source_url` 等业务必填值非空。
 
 gRPC Server 没有覆盖 grpcio 的默认接收消息大小，序列化后的整个请求不能
 超过 4 MiB。长内容应按语义分块并为 protobuf 字段开销预留空间；超限请求在
@@ -475,6 +496,17 @@ grpcurl -plaintext \
   -d '{"message":"LangGraph 是什么？","user_id":"tenant-a:user-42"}' \
   "${JARVIS_GRPC_TARGET}" \
   jarvis.JarvisService/Chat
+```
+
+一次性生成示例：
+
+```bash
+grpcurl -plaintext \
+  -import-path ./jarvis/api/grpc \
+  -proto jarvis.proto \
+  -d '{"prompt":"请严格输出 5 个章节 marker。","user_id":"go-cqhttp:wallstreet","operation":"wallstreet_summary_v2"}' \
+  "${JARVIS_GRPC_TARGET}" \
+  jarvis.JarvisService/Generate
 ```
 
 生产环境是否使用 `-plaintext` 取决于部署层是否启用 TLS。
@@ -524,7 +556,7 @@ print(response.answer, response.low_confidence)
 
 ### 5.5 gRPC 状态码
 
-`Chat` 对 LLM 错误采用以下映射：
+`Chat` 和 `Generate` 对 LLM 错误采用以下映射：
 
 | gRPC 状态 | 含义 |
 |---|---|
@@ -533,13 +565,13 @@ print(response.answer, response.low_confidence)
 | `RESOURCE_EXHAUSTED` | 模型限流，或请求/客户端响应超过接收方的 gRPC 上限 |
 | `DEADLINE_EXCEEDED` | 模型调用超时 |
 | `UNAVAILABLE` | 模型供应商不可用 |
-| `INTERNAL` | 已归一化的模型响应无效错误 |
-| `UNKNOWN` | `Chat` 中未被捕获的非 LLM 异常可能由 grpcio 映射为此状态 |
+| `INTERNAL` | 已归一化的模型响应无效错误，或 Jarvis 捕获到的未预期内部异常 |
 
 `Ingest`、`GetMemory` 和 `DeleteMemory` 进入 Servicer 后的内部失败当前
 统一返回 `INTERNAL`；超过 4 MiB 等传输层失败不经过这套映射。只有标准化
-LLM 错误详情经过脱敏，其他 gRPC error details 可能包含原始异常文本，不应
-记录或转发。重试策略应按 RPC 的幂等性区分，并同时尊重客户端 deadline。
+LLM 错误以及 `Chat`、`Generate` 未预期异常的详情经过脱敏，其他 gRPC error
+details 可能包含原始异常文本，不应记录或转发。重试策略应按 RPC 的幂等性
+区分，并同时尊重客户端 deadline。
 
 ## 6. 数据与会话语义
 
@@ -567,6 +599,8 @@ LLM 错误详情经过脱敏，其他 gRPC error details 可能包含原始异�
 - 每条历史消息单独提交，写入不是整轮原子事务；存储故障时可能只保存部分消息。
 - 服务成功启动后，如果 PostgreSQL 在单次请求期间不可用，`/chat` 会跳过
   历史加载或保存，仍可能返回成功。
+- gRPC `Generate` 不读写 PostgreSQL 对话历史，固定格式输出、日报摘要等
+  无状态任务不应复用 `/chat` 的历史上下文。
 
 ### 6.3 知识与 RAG
 
