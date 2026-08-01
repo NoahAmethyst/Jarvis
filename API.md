@@ -48,9 +48,9 @@ JARVIS_GRPC_TARGET=localhost:9090
   WebSocket、流式 Token 或流式 gRPC。
 - `/chat` 可能执行 RAG、工具调用和最多多轮回答反思，客户端应使用可配置且
   明显长于普通 REST 请求的超时，不要使用过短的默认超时。
-- gRPC `Generate` 是一次性生成接口，不加载或写入 PostgreSQL 对话历史，也不
-  进入 LangGraph 反思、工具调用或 RAG 流程。需要严格机器可解析输出的调用方
-  应优先使用 `Generate`，避免被历史对话格式污染。
+- gRPC `Generate` 是一次性生成接口，不加载或写入 PostgreSQL 对话历史；默认
+  仍会使用 RAG 和工具链，调用方可显式关闭。需要严格机器可解析输出但又不想
+  被历史对话格式污染的调用方应优先使用 `Generate`。
 - 当前应用层没有 API Key、JWT、Session 或租户鉴权。
 - `user_id` 直接决定对话历史和知识数据的隔离范围。调用方必须生成稳定、
   不可由其他用户任意冒用的标识，并在对外暴露 Jarvis 前通过网关补充鉴权和
@@ -432,6 +432,8 @@ message GenerateRequest {
   string user_id = 2;
   string llm = 3;
   string operation = 4;
+  bool disable_tools = 5;
+  bool disable_rag = 6;
 }
 
 message GenerateResponse {
@@ -467,10 +469,17 @@ message DeleteResponse {
 }
 ```
 
-`Generate` 只执行一次 `answer` Profile LLM 调用，`prompt` 作为唯一用户消息
-发送，`llm` 可按 `provider/model_id` 覆盖模型，`operation` 只用于服务端日志
-定位，不会传入模型。该 RPC 不加载、不保存 conversation history，也不使用
-知识库或工具；适合日报章节、结构化 JSON、固定 marker 等机器可解析输出。
+`GenerateRequest` 中的字段都是调用方输入：`prompt` 是本次用户请求，
+`user_id` 用于知识库隔离，`llm` 可按 `provider/model_id` 覆盖模型，
+`operation` 只用于服务端日志定位，不会传入模型。`disable_tools` 显式关闭
+工具链，`disable_rag` 显式关闭知识库检索；两者默认都是 `false`，即默认启用
+工具和 RAG。
+
+`Generate` 不加载、不保存 conversation history，也不调用 `memory_write`。
+Jarvis 内部工具链产生的 AI tool call、ToolMessage 和 RAG 文本只存在于本次
+请求的临时 Agent state 中，用于让模型完成回答，不会写入 PostgreSQL 对话历史。
+这适合天气查询、日报章节、结构化 JSON、固定 marker 等“需要工具或知识，但不
+希望历史对话污染格式”的单次任务。
 
 `proto3` 的未设置字符串字段在服务端表现为空字符串。虽然协议层不会报告
 “缺少必填字段”，客户端仍应保证 `message`、`prompt`、`user_id`、`content`
@@ -599,8 +608,9 @@ details 可能包含原始异常文本，不应记录或转发。重试策略应
 - 每条历史消息单独提交，写入不是整轮原子事务；存储故障时可能只保存部分消息。
 - 服务成功启动后，如果 PostgreSQL 在单次请求期间不可用，`/chat` 会跳过
   历史加载或保存，仍可能返回成功。
-- gRPC `Generate` 不读写 PostgreSQL 对话历史，固定格式输出、日报摘要等
-  无状态任务不应复用 `/chat` 的历史上下文。
+- gRPC `Generate` 不读写 PostgreSQL 对话历史，默认仍会按 `user_id` 检索
+  Qdrant 知识并允许模型调用工具；固定格式输出、日报摘要、实时天气等单次任务
+  不应复用 `/chat` 的历史上下文。
 
 ### 6.3 知识与 RAG
 

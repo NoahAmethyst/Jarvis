@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import grpc
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from jarvis.api.grpc import jarvis_pb2
 from jarvis.api.grpc.servicer import JarvisServicer
@@ -125,13 +125,13 @@ def test_grpc_missing_llm_config_maps_failed_precondition(monkeypatch, tmp_path)
     assert "secret-path" not in context.details
 
 
-def test_grpc_generate_uses_single_llm_call_without_conversation_memory():
+def test_grpc_generate_runs_tool_chain_without_conversation_memory():
     context = FakeContext()
     request = jarvis_pb2.GenerateRequest(
-        prompt="return exactly five chapter markers",
+        prompt="what is today's weather",
         user_id="go-cqhttp:wallstreet",
         llm="openai/gpt-4o",
-        operation="wallstreet_summary_v2",
+        operation="weather_lookup",
     )
 
     with patch("jarvis.api.grpc.servicer.graph.invoke") as graph_invoke, patch(
@@ -139,23 +139,137 @@ def test_grpc_generate_uses_single_llm_call_without_conversation_memory():
     ) as load_history, patch(
         "jarvis.api.grpc.servicer.conv_mem.save_message"
     ) as save_message, patch(
-        "jarvis.api.grpc.servicer.llm.chat",
-        return_value=AIMessage(content="<<<CHAPTER_1>>>\ncontent"),
-    ) as chat:
+        "jarvis.api.grpc.servicer.rag_retrieve",
+        return_value={"rag_context": ""},
+    ) as rag, patch(
+        "jarvis.api.grpc.servicer.plan_and_call",
+        side_effect=[
+            {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "web_search",
+                                "args": {"query": "today weather"},
+                                "id": "call-1",
+                            }
+                        ],
+                    )
+                ]
+            },
+            {"messages": [AIMessage(content="Sunny today.")]},
+        ],
+    ) as plan, patch(
+        "jarvis.api.grpc.servicer.execute_tools",
+        return_value={
+            "messages": [
+                ToolMessage(
+                    content="Weather result",
+                    tool_call_id="call-1",
+                    name="web_search",
+                )
+            ],
+            "unavailable_tools": [],
+        },
+    ) as execute:
         response = JarvisServicer().Generate(request, context)
 
-    assert response.text == "<<<CHAPTER_1>>>\ncontent"
+    assert response.text == "Sunny today."
     assert context.code is None
     graph_invoke.assert_not_called()
     load_history.assert_not_called()
     save_message.assert_not_called()
-    call = chat.call_args.kwargs
-    assert call["profile"] == "answer"
-    assert call["tools"] is None
-    assert call["override"] == "openai/gpt-4o"
-    assert [message.content for message in call["messages"]] == [
-        "return exactly five chapter markers"
-    ]
+    rag.assert_called_once()
+    assert plan.call_count == 2
+    execute.assert_called_once()
+    first_state = plan.call_args_list[0].args[0]
+    assert first_state["history"] == []
+    assert first_state["query"] == "what is today's weather"
+    assert first_state["llm_override"] == "openai/gpt-4o"
+    assert first_state["tools_enabled"] is True
+    second_state = plan.call_args_list[1].args[0]
+    assert any(isinstance(message, ToolMessage) for message in second_state["messages"])
+
+
+def test_grpc_generate_can_disable_tools_for_plain_generation():
+    context = FakeContext()
+    request = jarvis_pb2.GenerateRequest(
+        prompt="return exactly five chapter markers",
+        user_id="go-cqhttp:wallstreet",
+        operation="wallstreet_summary_v2",
+        disable_tools=True,
+    )
+
+    with patch(
+        "jarvis.api.grpc.servicer.rag_retrieve",
+        return_value={"rag_context": "summary context"},
+    ) as rag, patch(
+        "jarvis.api.grpc.servicer.plan_and_call",
+        return_value={"messages": [AIMessage(content="<<<CHAPTER_1>>>\ncontent")]},
+    ) as plan, patch("jarvis.api.grpc.servicer.execute_tools") as execute:
+        response = JarvisServicer().Generate(request, context)
+
+    assert response.text == "<<<CHAPTER_1>>>\ncontent"
+    assert context.code is None
+    rag.assert_called_once()
+    execute.assert_not_called()
+    state = plan.call_args.args[0]
+    assert state["tools_enabled"] is False
+    assert state["rag_context"] == "summary context"
+
+
+def test_grpc_generate_uses_rag_by_default_without_conversation_memory():
+    context = FakeContext()
+    request = jarvis_pb2.GenerateRequest(
+        prompt="summarize stored policy",
+        user_id="u1",
+        operation="policy_summary",
+    )
+
+    with patch(
+        "jarvis.api.grpc.servicer.rag_retrieve",
+        return_value={"rag_context": "retrieved policy"},
+    ) as rag, patch(
+        "jarvis.api.grpc.servicer.plan_and_call",
+        return_value={"messages": [AIMessage(content="Policy summary")]},
+    ) as plan, patch(
+        "jarvis.api.grpc.servicer.conv_mem.load_history"
+    ) as load_history, patch(
+        "jarvis.api.grpc.servicer.conv_mem.save_message"
+    ) as save_message:
+        response = JarvisServicer().Generate(request, context)
+
+    assert response.text == "Policy summary"
+    assert context.code is None
+    rag.assert_called_once()
+    load_history.assert_not_called()
+    save_message.assert_not_called()
+    state = plan.call_args.args[0]
+    assert state["rag_context"] == "retrieved policy"
+
+
+def test_grpc_generate_can_disable_rag():
+    context = FakeContext()
+    request = jarvis_pb2.GenerateRequest(
+        prompt="summarize only this prompt",
+        user_id="u1",
+        operation="prompt_only",
+        disable_rag=True,
+        disable_tools=True,
+    )
+
+    with patch("jarvis.api.grpc.servicer.rag_retrieve") as rag, patch(
+        "jarvis.api.grpc.servicer.plan_and_call",
+        return_value={"messages": [AIMessage(content="Prompt summary")]},
+    ) as plan:
+        response = JarvisServicer().Generate(request, context)
+
+    assert response.text == "Prompt summary"
+    assert context.code is None
+    rag.assert_not_called()
+    state = plan.call_args.args[0]
+    assert state["rag_context"] == ""
 
 
 def test_grpc_generate_maps_llm_errors():
@@ -167,7 +281,10 @@ def test_grpc_generate_maps_llm_errors():
     )
 
     with patch(
-        "jarvis.api.grpc.servicer.llm.chat",
+        "jarvis.api.grpc.servicer.rag_retrieve",
+        return_value={"rag_context": ""},
+    ), patch(
+        "jarvis.api.grpc.servicer.plan_and_call",
         side_effect=LLMInvalidRequestError("invalid LLM request"),
     ):
         response = JarvisServicer().Generate(request, context)

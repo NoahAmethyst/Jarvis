@@ -65,6 +65,20 @@ def test_plan_and_call_uses_answer_profile():
     ]
 
 
+def test_plan_and_call_can_disable_tools_for_stateless_generation():
+    from jarvis.agent.nodes import plan_and_call as module
+
+    response = AIMessage(content="answer")
+    with patch.object(module.llm, "chat", return_value=response) as chat, patch.object(
+        module, "get_tools"
+    ) as get_tools:
+        result = module.plan_and_call(_state(tools_enabled=False))
+
+    assert result == {"messages": [response]}
+    get_tools.assert_not_called()
+    assert chat.call_args.kwargs["tools"] == []
+
+
 def test_plan_and_call_logs_and_reraises_unexpected_errors(caplog):
     from jarvis.agent.nodes import plan_and_call as module
 

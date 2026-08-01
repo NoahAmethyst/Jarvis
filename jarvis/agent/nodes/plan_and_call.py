@@ -19,8 +19,10 @@ def plan_and_call(state: AgentState) -> dict:
             system_content += f"\n\n{state['active_agent'].instructions}"
 
         all_messages = [SystemMessage(content=system_content)] + state["history"] + state["messages"]
-        tools = get_tools(
-            excluded_names=state.get("unavailable_tools", [])
+        tools = (
+            get_tools(excluded_names=state.get("unavailable_tools", []))
+            if state.get("tools_enabled", True)
+            else []
         )
         response = llm.chat(
             profile="answer",

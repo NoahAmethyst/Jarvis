@@ -238,8 +238,9 @@ curl -X DELETE http://localhost:8080/memory/user_001
 ## gRPC API
 
 Proto 定义见 `jarvis/api/grpc/jarvis.proto`，服务名 `JarvisService`。常规对话使用
-`Chat`，机器可解析的一次性生成使用不读写对话历史的 `Generate`；知识和记忆
-接口为 `Ingest`、`GetMemory`、`DeleteMemory`。
+`Chat`，无历史污染的一次性生成使用 `Generate`。`Generate` 默认仍会走 RAG
+和工具链，可通过请求字段显式关闭；知识和记忆接口为 `Ingest`、`GetMemory`、
+`DeleteMemory`。
 
 ## LLM 配置
 

@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cjarvis.proto\x12\x06jarvis\"Q\n\x0b\x43hatRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0b\n\x03llm\x18\x03 \x01(\t\x12\x13\n\x0breflect_llm\x18\x04 \x01(\t\"6\n\x0c\x43hatResponse\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t\x12\x16\n\x0elow_confidence\x18\x02 \x01(\x08\"R\n\x0fGenerateRequest\x12\x0e\n\x06prompt\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0b\n\x03llm\x18\x03 \x01(\t\x12\x11\n\toperation\x18\x04 \x01(\t\" \n\x10GenerateResponse\x12\x0c\n\x04text\x18\x01 \x01(\t\"E\n\rIngestRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x12\n\nsource_url\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t\"!\n\x0eIngestResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\" \n\rMemoryRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"<\n\x0eMemoryResponse\x12*\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x19.jarvis.ConversationEntry\"F\n\x11\x43onversationEntry\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\t\"!\n\x0e\x44\x65leteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32\xb5\x02\n\rJarvisService\x12\x31\n\x04\x43hat\x12\x13.jarvis.ChatRequest\x1a\x14.jarvis.ChatResponse\x12=\n\x08Generate\x12\x17.jarvis.GenerateRequest\x1a\x18.jarvis.GenerateResponse\x12\x37\n\x06Ingest\x12\x15.jarvis.IngestRequest\x1a\x16.jarvis.IngestResponse\x12:\n\tGetMemory\x12\x15.jarvis.MemoryRequest\x1a\x16.jarvis.MemoryResponse\x12=\n\x0c\x44\x65leteMemory\x12\x15.jarvis.MemoryRequest\x1a\x16.jarvis.DeleteResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cjarvis.proto\x12\x06jarvis\"Q\n\x0b\x43hatRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0b\n\x03llm\x18\x03 \x01(\t\x12\x13\n\x0breflect_llm\x18\x04 \x01(\t\"6\n\x0c\x43hatResponse\x12\x0e\n\x06\x61nswer\x18\x01 \x01(\t\x12\x16\n\x0elow_confidence\x18\x02 \x01(\x08\"~\n\x0fGenerateRequest\x12\x0e\n\x06prompt\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0b\n\x03llm\x18\x03 \x01(\t\x12\x11\n\toperation\x18\x04 \x01(\t\x12\x15\n\rdisable_tools\x18\x05 \x01(\x08\x12\x13\n\x0b\x64isable_rag\x18\x06 \x01(\x08\" \n\x10GenerateResponse\x12\x0c\n\x04text\x18\x01 \x01(\t\"E\n\rIngestRequest\x12\x0f\n\x07\x63ontent\x18\x01 \x01(\t\x12\x12\n\nsource_url\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t\"!\n\x0eIngestResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\" \n\rMemoryRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"<\n\x0eMemoryResponse\x12*\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x19.jarvis.ConversationEntry\"F\n\x11\x43onversationEntry\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\t\"!\n\x0e\x44\x65leteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32\xb5\x02\n\rJarvisService\x12\x31\n\x04\x43hat\x12\x13.jarvis.ChatRequest\x1a\x14.jarvis.ChatResponse\x12=\n\x08Generate\x12\x17.jarvis.GenerateRequest\x1a\x18.jarvis.GenerateResponse\x12\x37\n\x06Ingest\x12\x15.jarvis.IngestRequest\x1a\x16.jarvis.IngestResponse\x12:\n\tGetMemory\x12\x15.jarvis.MemoryRequest\x1a\x16.jarvis.MemoryResponse\x12=\n\x0c\x44\x65leteMemory\x12\x15.jarvis.MemoryRequest\x1a\x16.jarvis.DeleteResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,21 +36,21 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CHATRESPONSE']._serialized_start=107
   _globals['_CHATRESPONSE']._serialized_end=161
   _globals['_GENERATEREQUEST']._serialized_start=163
-  _globals['_GENERATEREQUEST']._serialized_end=245
-  _globals['_GENERATERESPONSE']._serialized_start=247
-  _globals['_GENERATERESPONSE']._serialized_end=279
-  _globals['_INGESTREQUEST']._serialized_start=281
-  _globals['_INGESTREQUEST']._serialized_end=350
-  _globals['_INGESTRESPONSE']._serialized_start=352
-  _globals['_INGESTRESPONSE']._serialized_end=385
-  _globals['_MEMORYREQUEST']._serialized_start=387
-  _globals['_MEMORYREQUEST']._serialized_end=419
-  _globals['_MEMORYRESPONSE']._serialized_start=421
-  _globals['_MEMORYRESPONSE']._serialized_end=481
-  _globals['_CONVERSATIONENTRY']._serialized_start=483
-  _globals['_CONVERSATIONENTRY']._serialized_end=553
-  _globals['_DELETERESPONSE']._serialized_start=555
-  _globals['_DELETERESPONSE']._serialized_end=588
-  _globals['_JARVISSERVICE']._serialized_start=591
-  _globals['_JARVISSERVICE']._serialized_end=900
+  _globals['_GENERATEREQUEST']._serialized_end=289
+  _globals['_GENERATERESPONSE']._serialized_start=291
+  _globals['_GENERATERESPONSE']._serialized_end=323
+  _globals['_INGESTREQUEST']._serialized_start=325
+  _globals['_INGESTREQUEST']._serialized_end=394
+  _globals['_INGESTRESPONSE']._serialized_start=396
+  _globals['_INGESTRESPONSE']._serialized_end=429
+  _globals['_MEMORYREQUEST']._serialized_start=431
+  _globals['_MEMORYREQUEST']._serialized_end=463
+  _globals['_MEMORYRESPONSE']._serialized_start=465
+  _globals['_MEMORYRESPONSE']._serialized_end=525
+  _globals['_CONVERSATIONENTRY']._serialized_start=527
+  _globals['_CONVERSATIONENTRY']._serialized_end=597
+  _globals['_DELETERESPONSE']._serialized_start=599
+  _globals['_DELETERESPONSE']._serialized_end=632
+  _globals['_JARVISSERVICE']._serialized_start=635
+  _globals['_JARVISSERVICE']._serialized_end=944
 # @@protoc_insertion_point(module_scope)

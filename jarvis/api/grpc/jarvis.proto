@@ -27,6 +27,8 @@ message GenerateRequest {
   string user_id = 2;
   string llm = 3;
   string operation = 4;
+  bool disable_tools = 5;
+  bool disable_rag = 6;
 }
 
 message GenerateResponse {

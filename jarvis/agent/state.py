@@ -1,5 +1,5 @@
 from typing import Annotated, Optional
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from jarvis.agents import AgentDefinition
@@ -20,3 +20,4 @@ class AgentState(TypedDict):
     active_agent: Optional[AgentDefinition]
     agent_dispatch_score: float
     unavailable_tools: list[str]
+    tools_enabled: NotRequired[bool]
