@@ -1,6 +1,7 @@
 import copy
 import logging
 import os
+import re
 import unicodedata
 
 
@@ -18,9 +19,16 @@ LEVEL_COLORS = {
     logging.ERROR: "\x1b[31m",
 }
 MAX_LOG_TAG_PART_LENGTH = 160
+MAX_LOG_DETAIL_LENGTH = 500
+SECRET_PATTERNS = (
+    re.compile(r"(?i)\b(api[_-]?key|token|password|secret)\s*[:=]\s*[^,\s;}\]]+"),
+    re.compile(r"(?i)\b(authorization)\s*[:=]\s*bearer\s+[A-Za-z0-9._~+/\-]+=*"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/\-]+=*"),
+    re.compile(r"\bsk-[A-Za-z0-9._~+\-/]{6,}"),
+)
 
 
-def _safe_tag_part(value: object) -> str:
+def sanitize_log_value(value: object, max_length: int = MAX_LOG_DETAIL_LENGTH) -> str:
     sanitized = "".join(
         " "
         if unicodedata.category(character).startswith("C")
@@ -28,11 +36,20 @@ def _safe_tag_part(value: object) -> str:
         else character
         for character in str(value)
     )
-    return (
-        sanitized.replace("【", "(").replace("】", ")")[
-            :MAX_LOG_TAG_PART_LENGTH
-        ]
-    )
+    sanitized = sanitized.replace("【", "(").replace("】", ")")
+    for pattern in SECRET_PATTERNS:
+        sanitized = pattern.sub(_redact_secret_match, sanitized)
+    return sanitized[:max_length]
+
+
+def _redact_secret_match(match: re.Match) -> str:
+    if match.lastindex:
+        return f"{match.group(1)}=<redacted>"
+    return "<redacted>"
+
+
+def _safe_tag_part(value: object) -> str:
+    return sanitize_log_value(value, max_length=MAX_LOG_TAG_PART_LENGTH)
 
 
 def format_log_tags(*fields: tuple[str, object]) -> str:

@@ -27,12 +27,37 @@ from jarvis.llm.errors import (
     LLMTimeoutError,
     LLMUnavailableError,
 )
-from jarvis.logging_config import format_log_tags
+from jarvis.logging_config import format_log_tags, sanitize_log_value
 
 
 logger = logging.getLogger(__name__)
 
 TRANSIENT_ERRORS = (LLMRateLimitError, LLMTimeoutError, LLMUnavailableError)
+
+
+def _provider_error_status(error: Exception) -> int | None:
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    response = getattr(error, "response", None)
+    response_status = getattr(response, "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def _provider_error_detail(error: Exception) -> str:
+    body = getattr(error, "body", None)
+    if isinstance(body, Mapping):
+        nested_error = body.get("error")
+        if isinstance(nested_error, Mapping):
+            message = nested_error.get("message")
+            if message:
+                return sanitize_log_value(message)
+        message = body.get("message")
+        if message:
+            return sanitize_log_value(message)
+    if body:
+        return sanitize_log_value(body)
+    return sanitize_log_value(error)
 
 
 class LLMGateway:
@@ -245,14 +270,20 @@ class LLMGateway:
                 return response
             except Exception as error:
                 normalized = normalize_provider_error(error)
+                detail_fields = [("归一化", type(normalized).__name__)]
+                status_code = _provider_error_status(error)
+                if status_code is not None:
+                    detail_fields.append(("状态码", status_code))
                 logger.warning(
-                    "%s LLM request failed",
+                    "%s LLM request failed %s detail=%s",
                     format_log_tags(
                         ("供应商", provider_name),
                         ("模型", model_id),
                         ("结果", "失败"),
                         ("错误", type(error).__name__),
                     ),
+                    format_log_tags(*detail_fields),
+                    _provider_error_detail(error),
                 )
                 if (
                     isinstance(normalized, TRANSIENT_ERRORS)

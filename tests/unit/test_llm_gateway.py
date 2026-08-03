@@ -379,6 +379,44 @@ def test_raw_timeout_is_normalized_and_redacted(
     ) in caplog.text
 
 
+def test_provider_bad_request_log_includes_sanitized_details(
+    settings, fake_adapters, caplog
+):
+    request = httpx.Request("POST", "https://api.example/chat")
+    response = httpx.Response(
+        400,
+        request=request,
+        json={
+            "error": {
+                "message": (
+                    "Invalid messages[1].content; api_key=sk-secret-value"
+                ),
+                "type": "invalid_request_error",
+            }
+        },
+    )
+    fake_adapters.deepseek.model.invoke.side_effect = openai.BadRequestError(
+        "Invalid messages[1].content; api_key=sk-secret-value",
+        response=response,
+        body=response.json(),
+    )
+    gateway = _gateway(settings, fake_adapters)
+
+    with caplog.at_level(logging.WARNING, logger="jarvis.llm.gateway"):
+        with pytest.raises(LLMInvalidRequestError):
+            gateway.chat(
+                "answer",
+                [HumanMessage(content="hello")],
+                tools=[fake_tool],
+            )
+
+    assert "【状态码:400】" in caplog.text
+    assert "【归一化:LLMInvalidRequestError】" in caplog.text
+    assert "Invalid messages[1].content" in caplog.text
+    assert "sk-secret-value" not in caplog.text
+    assert "api_key=<redacted>" in caplog.text
+
+
 def test_raw_rate_limit_is_normalized_and_redacted(settings, fake_adapters):
     request = httpx.Request("POST", "https://api.example/chat")
     response = httpx.Response(429, request=request)

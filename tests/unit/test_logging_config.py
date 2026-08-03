@@ -7,6 +7,7 @@ from jarvis.logging_config import (
     HealthCheckAccessFilter,
     configure_logging,
     format_log_tags,
+    sanitize_log_value,
 )
 
 
@@ -121,3 +122,16 @@ def test_format_log_tags_bounds_each_name_and_value():
     rendered = format_log_tags(("x" * 200, "y" * 200))
 
     assert rendered == f"【{'x' * 160}:{'y' * 160}】"
+
+
+def test_sanitize_log_value_redacts_common_secret_shapes():
+    rendered = sanitize_log_value(
+        "api_key=sk-secret-value Authorization: Bearer abc.def token=my-token"
+    )
+
+    assert "sk-secret-value" not in rendered
+    assert "abc.def" not in rendered
+    assert "my-token" not in rendered
+    assert "api_key=<redacted>" in rendered
+    assert "Authorization=<redacted>" in rendered
+    assert "token=<redacted>" in rendered
