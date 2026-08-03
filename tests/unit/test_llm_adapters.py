@@ -168,6 +168,7 @@ def test_deepseek_payload_replays_reasoning_content(monkeypatch):
     )
 
     assert payload["messages"][1]["reasoning_content"] == "must replay"
+    assert payload["messages"][1]["content"] == ""
 
 
 def test_deepseek_transport_parses_and_replays_reasoning_content(monkeypatch):
@@ -197,6 +198,7 @@ def test_deepseek_transport_parses_and_replays_reasoning_content(monkeypatch):
         ]
     )
     assert requests[1]["messages"][1]["reasoning_content"] == "must replay"
+    assert requests[1]["messages"][1]["content"] == ""
 
 
 def test_openai_compatible_adapter_uses_env_base_url_override(monkeypatch):

@@ -23,6 +23,8 @@ class JarvisChatDeepSeek(ChatDeepSeek):
         for source, target in zip(source_messages, payload["messages"], strict=True):
             if not isinstance(source, AIMessage):
                 continue
+            if target.get("content") is None:
+                target["content"] = ""
             reasoning_content = source.additional_kwargs.get("reasoning_content")
             if reasoning_content is not None:
                 target["reasoning_content"] = reasoning_content
