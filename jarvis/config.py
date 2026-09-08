@@ -26,3 +26,6 @@ KNOWLEDGE_MIN_LENGTH = int(os.getenv("KNOWLEDGE_MIN_LENGTH", "200"))
 
 AGENTS_DIR = os.getenv("AGENTS_DIR", ".agents/skills")
 AGENT_DISPATCH_THRESHOLD = float(os.getenv("AGENT_DISPATCH_THRESHOLD", "0.6"))
+
+QQBOT_GRPC_TARGET = os.getenv("QQBOT_GRPC_TARGET", "qq-bot:9090")
+LLM_ERROR_QQ_USER_ID = os.getenv("LLM_ERROR_QQ_USER_ID", "")

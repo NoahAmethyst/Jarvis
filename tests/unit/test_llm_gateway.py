@@ -483,3 +483,36 @@ def test_legacy_router_import_does_not_load_yaml(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_402_failure_sends_sanitized_qq_alert(settings, fake_adapters, monkeypatch):
+    notify = MagicMock()
+    monkeypatch.setattr("jarvis.llm.gateway.notify_llm_failure", notify, raising=False)
+    response = httpx.Response(402, request=httpx.Request("POST", "https://example.test"))
+    fake_adapters.deepseek.model.invoke.side_effect = openai.APIStatusError(
+        "Insufficient Balance", response=response,
+        body={"error": {"message": "Insufficient Balance api_key=sk-secret-value"}},
+    )
+    with pytest.raises(LLMInvalidRequestError):
+        _gateway(settings, fake_adapters).chat("answer", [HumanMessage(content="private prompt")])
+    notify.assert_called_once()
+    message = notify.call_args.args[0]
+    for expected in ("deepseek", "deepseek-v4-pro", "402", "Insufficient Balance", "APIStatusError"):
+        assert expected in message
+    assert "sk-secret-value" not in message
+    assert "private prompt" not in message
+
+
+def test_retry_failure_alerts_without_changing_recovery(settings, fake_adapters, monkeypatch):
+    notify = MagicMock()
+    monkeypatch.setattr("jarvis.llm.gateway.notify_llm_failure", notify, raising=False)
+    fake_adapters.deepseek.model.invoke.side_effect = [LLMTimeoutError("timeout"), AIMessage(content="ok")]
+    assert _gateway(settings, fake_adapters).chat("answer", [HumanMessage(content="hi")]).content == "ok"
+    notify.assert_called_once()
+
+
+def test_success_does_not_alert(settings, fake_adapters, monkeypatch):
+    notify = MagicMock()
+    monkeypatch.setattr("jarvis.llm.gateway.notify_llm_failure", notify, raising=False)
+    _gateway(settings, fake_adapters).chat("answer", [HumanMessage(content="hi")])
+    notify.assert_not_called()

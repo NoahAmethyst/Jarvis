@@ -440,3 +440,16 @@ jarvis/
     ├── http/routes.py     # FastAPI endpoints
     └── grpc/              # gRPC server + servicer + proto
 ```
+
+### 大模型失败 QQ 私聊告警
+
+在 Jarvis 进程中设置以下环境变量：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `QQBOT_GRPC_TARGET` | QQbot gRPC 地址，默认 `qq-bot:9090` |
+| `LLM_ERROR_QQ_USER_ID` | 接收私聊的 QQ 账号，例如 `1066840101`；留空（默认）关闭告警 |
+
+网关每次供应商调用失败都会通过 `/proto.QQBotService/SendMsg` 发送私聊（`group=false`），包括供应商、模型、错误类型、HTTP 状态码（如有）和脱敏后的错误摘要，不附加聊天上下文。重试过程中发生的失败也会发送告警。通知超时为 3 秒，通知失败仅记录告警，不改变原有大模型异常或重试行为。HTTP 402 的 `Insufficient Balance` 会触发通知，但仍需为供应商账户充值才能恢复调用。
+
+Kubernetes 可在 `jarvis-config` ConfigMap 中设置这两个变量。修改后需应用清单并更新 Pod 才能让环境变量生效。仓库中的 `jarvis.yaml` 默认关闭告警，部署时按需填写接收账号。

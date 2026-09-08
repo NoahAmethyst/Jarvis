@@ -16,6 +16,7 @@ from langchain_core.tools import BaseTool
 
 from jarvis.llm.adapters import ADAPTERS
 from jarvis.llm.adapters.base import BaseAdapter
+from jarvis.llm.alerts import notify_llm_failure
 from jarvis.llm.config import LLMSettings, ProfileSettings, ThinkingSettings, parse_model_spec
 from jarvis.llm.errors import (
     LLMConfigurationError,
@@ -274,8 +275,7 @@ class LLMGateway:
                 status_code = _provider_error_status(error)
                 if status_code is not None:
                     detail_fields.append(("状态码", status_code))
-                logger.warning(
-                    "%s LLM request failed %s detail=%s",
+                failure_message = "%s LLM request failed %s detail=%s" % (
                     format_log_tags(
                         ("供应商", provider_name),
                         ("模型", model_id),
@@ -285,6 +285,8 @@ class LLMGateway:
                     format_log_tags(*detail_fields),
                     _provider_error_detail(error),
                 )
+                logger.warning("%s", failure_message)
+                notify_llm_failure(failure_message)
                 if (
                     isinstance(normalized, TRANSIENT_ERRORS)
                     and attempt + 1 < profile.retry.max_attempts
