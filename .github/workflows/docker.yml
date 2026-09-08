@@ -10,6 +10,7 @@ on:
       - ".agents/skills/**/agent.yaml"
       - ".agents/skills/**/agents/**"
       - "Dockerfile"
+      - ".github/workflows/docker.yml"
       - "pyproject.toml"
       - "llm.yaml"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - ".agents/skills/**/agent.yaml"
       - ".agents/skills/**/agents/**"
       - "Dockerfile"
+      - ".github/workflows/docker.yml"
       - "pyproject.toml"
       - "llm.yaml"
 
@@ -50,6 +52,8 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          # Aliyun rejects the OCI empty config used by provenance attestations.
+          provenance: false
           push: ${{ github.event_name == 'push' }}
           tags: |
             registry.cn-hangzhou.aliyuncs.com/lexmargin/jarvis:latest
