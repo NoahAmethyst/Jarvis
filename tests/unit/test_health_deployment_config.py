@@ -40,3 +40,21 @@ def test_llm_alert_configuration_is_available_and_opt_in():
     config = next(doc for doc in documents if doc and doc.get("kind") == "ConfigMap")
     assert config["data"]["QQBOT_GRPC_TARGET"] == "qq-bot:9090"
     assert config["data"]["LLM_ERROR_QQ_USER_ID"] == ""
+
+
+def test_external_llm_config_mount_and_generator_agree():
+    documents = list(yaml.safe_load_all((ROOT / "jarvis.yaml").read_text()))
+    config = next(doc for doc in documents if doc and doc.get("kind") == "ConfigMap")
+    deployment = next(doc for doc in documents if doc and doc.get("kind") == "Deployment")
+    spec = deployment["spec"]["template"]["spec"]
+    container = _jarvis_container()
+    mount = next(m for m in container["volumeMounts"] if m["name"] == "llm-config")
+    volume = next(v for v in spec["volumes"] if v["name"] == mount["name"])
+    generator = yaml.safe_load((ROOT / "kustomization.yaml").read_text())
+    generated = next(g for g in generator["configMapGenerator"] if g["name"] == volume["configMap"]["name"])
+    assert generated["files"] == ["llm.yaml"]
+    assert mount["readOnly"] is True
+    assert "subPath" not in mount
+    assert config["data"]["LLM_CONFIG_PATH"] == mount["mountPath"] + "/llm.yaml"
+    assert volume["configMap"]["items"] == [{"key": "llm.yaml", "path": "llm.yaml"}]
+    assert not generator.get("generatorOptions", {}).get("disableNameSuffixHash", False)

@@ -319,8 +319,16 @@ Thresholds come from:
     `jarvis-secrets` resource must be provisioned out of band.
   - ConfigMap includes Agent dispatch defaults: `AGENTS_DIR` and
     `AGENT_DISPATCH_THRESHOLD`.
-  - ConfigMap points to `llm.yaml`, the direct DeepSeek base URL, and the shared
-    Qdrant service.
+  - ConfigMap sets `LLM_CONFIG_PATH=/etc/jarvis/llm.yaml`, the direct DeepSeek
+    base URL, and the shared Qdrant service.
+  - `kustomization.yaml` generates a hashed `jarvis-llm-config-*` ConfigMap
+    from standalone `llm.yaml`. Deployment mounts it read-only at `/etc/jarvis`.
+    Deploy with `kubectl apply -k /root/jarvis`, not `apply -f jarvis.yaml`.
+    All three files must be synchronized together. Applying a changed file
+    changes the Pod reference hash and triggers rollout; synchronization alone
+    never changes live resources. Old hashed ConfigMaps require later cleanup.
+  - The mounted file is the base configuration; runtime PostgreSQL overrides
+    remain higher priority and are visible in the model administration API.
   - Service type is NodePort. The application itself binds HTTP to
     `0.0.0.0:8080` and plaintext gRPC to `[::]:9090`; network isolation is
     required because the application has no authentication or TLS.

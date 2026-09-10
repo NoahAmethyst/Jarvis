@@ -162,14 +162,32 @@ Docker `HEALTHCHECK` 使用 `/health/live`。Kubernetes readinessProbe 使用
 探针，镜像来自
 `registry.cn-hangzhou.aliyuncs.com/lexmargin/jarvis:latest`。
 
+部署目录（远端 `/root/jarvis`）需同时保留 `jarvis.yaml`、`llm.yaml` 和
+`kustomization.yaml`。Kustomize 从独立的 `llm.yaml` 生成带内容哈希的
+`jarvis-llm-config-*` ConfigMap，Deployment 将其只读挂载到 `/etc/jarvis`，
+通过 `LLM_CONFIG_PATH=/etc/jarvis/llm.yaml` 读取，不依赖镜像内置配置。
+该 ConfigMap 不通过 `envFrom` 注入，里面只包含模型基础配置，不包含密钥。
+
+可先用 `kubectl kustomize /root/jarvis` 离线查看最终清单。修改 `llm.yaml`
+后重新应用 Kustomize 目录，ConfigMap 哈希和 Pod 模板引用随之变化，触发
+Deployment 更新，使进程重新加载基础配置。单纯同步文件不会改变正在运行的
+服务；不要再单独使用 `kubectl apply -f jarvis.yaml`，它不会创建生成的 ConfigMap。
+旧哈希 ConfigMap 不会自动删除，回滚窗口结束后再由运维按引用情况清理。
+
+`llm.yaml` 展示基础默认值；若启用管理页，PostgreSQL 中的模型覆盖优先。
+管理页/API 显示实际生效模型，恢复默认值并保存才会清除数据库覆盖。
+
 清单引用的 `jarvis-secrets` 必须通过集群的安全凭据流程预先创建。不要把真实
 API Key、数据库密码、Token 或 kubeconfig 写入 `jarvis.yaml`、`llm.yaml` 或
 Git 提交。凭据准备完成后可应用清单：
 
 ```bash
-kubectl apply -f jarvis.yaml
+kubectl apply -k /root/jarvis
 kubectl rollout status deployment/jarvis --timeout=180s
 ```
+
+本地操作可将 `/root/jarvis` 替换为当前仓库目录。自动镜像发布工作流只更新
+Pod，不会同步或应用这些配置文件，配置变更需通过上述独立流程执行。
 
 ## HTTP API
 

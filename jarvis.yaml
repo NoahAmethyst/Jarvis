@@ -13,7 +13,7 @@ metadata:
 data:
   HTTP_PORT: "8080"
   GRPC_PORT: "9090"
-  LLM_CONFIG_PATH: "llm.yaml"
+  LLM_CONFIG_PATH: "/etc/jarvis/llm.yaml"
   QQBOT_GRPC_TARGET: "qq-bot:9090"
   LLM_ERROR_QQ_USER_ID: ""
   DEEPSEEK_BASE_URL: "https://api.deepseek.com"
@@ -47,10 +47,21 @@ spec:
     spec:
       imagePullSecrets:
         - name: aliyun-docker-register
+      volumes:
+        - name: llm-config
+          configMap:
+            name: jarvis-llm-config
+            items:
+              - key: llm.yaml
+                path: llm.yaml
       containers:
         - name: jarvis
           image: registry.cn-hangzhou.aliyuncs.com/lexmargin/jarvis:latest
           imagePullPolicy: Always
+          volumeMounts:
+            - name: llm-config
+              mountPath: /etc/jarvis
+              readOnly: true
           ports:
             - name: http
               containerPort: 8080

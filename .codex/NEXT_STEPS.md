@@ -40,6 +40,20 @@ Independent review findings were fixed. Real PostgreSQL multi-connection CAS
 and paid provider integration remain unverified. A temporary loopback-only
 preview may run on port 8768 with in-memory demo data, not production settings.
 
+Deployment config follow-up on 2026-09-10: Kustomize now generates the LLM
+ConfigMap from a standalone file and mounts `/etc/jarvis/llm.yaml`. The remote
+directory needs `jarvis.yaml`, `llm.yaml`, and `kustomization.yaml` together.
+Use `kubectl apply -k /root/jarvis` only after explicit deployment approval;
+the image/Pod update workflow does not apply this configuration. Preserve the
+remote-only `LLM_ERROR_QQ_USER_ID` value when synchronizing the sanitized manifest.
+Synchronization completed on 2026-09-10 to `root@1.15.231.125:/root/jarvis`:
+all three files are present and their SHA-256 hashes were verified after transfer.
+The remote manifest retains its existing alert recipient; repository YAML keeps
+the recipient empty. Backup: `/root/jarvis/jarvis.yaml.before-20260910-llm`.
+Both local and remote offline Kustomize rendering passed, along with 19 focused
+tests and independent code review. No `apply`, Pod deletion, restart, image build,
+or push was executed. The live Deployment has NOT yet acquired this mount.
+
 The earlier 2026-07-10 model choices below are historical.
 
 Status on 2026-07-10: implementation is complete locally and committed in
