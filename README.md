@@ -122,7 +122,7 @@ NO_COLOR=1 python jarvis/main.py
 关键日志采用连续的 `【类别:值】` 标签，标签值保留配置和代码中的原始标识：
 
 ```text
-【供应商:deepseek】【模型:deepseek-v4-pro】【类型:Chat】【结果:成功】 Startup connectivity check completed
+【供应商:deepseek】【模型:deepseek-flash】【类型:Chat】【结果:成功】 Startup connectivity check completed
 【组件:web_search】【类型:Tool】【配置:TAVILY_API_KEY】【状态:未配置】 Required credential is not configured
 【节点:agent_dispatch】【Agent:ai-agent-mentor】【评分:0.86】 Agent selected
 【节点:rag_retrieve】【组件:Qdrant】【状态:降级】【错误:ResponseHandlingException】 Retrieval unavailable
@@ -248,11 +248,39 @@ Proto 定义见 `jarvis/api/grpc/jarvis.proto`，服务名 `JarvisService`。常
 `reflection`、`agent_dispatch` 三个 Profile，供应商与协议差异由
 LLM Gateway 和固定 Adapter 处理。
 
+### 可视化模型配置
+
+管理页入口为 `/admin/models`。设置 `LLM_RUNTIME_CONFIG_ENABLED=true`，并从
+Secret/环境变量注入独立的 `JARVIS_ADMIN_TOKEN` 后可登录管理。远端访问应通过
+HTTPS 或受保护的本地转发；不要在 URL 或 YAML 中写入真实 Token。
+
+页面分别管理回答、反思、Agent 分派的模型，支持获取 DeepSeek/OpenAI 兼容
+供应商的模型列表和手填模型 ID；Anthropic 模型使用手填。模型名没有代码枚举，
+后续换模型无需改 Python 或重建镜像。保存只验证配置格式、供应商凭据是否存在
+及 Profile 所需能力，不会发送付费对话请求，也不代表已验证该模型可调用。
+
+配置存入现有 PostgreSQL 的 `llm_runtime_config` 表，服务启动时自动建表。
+启用后每个新 HTTP Chat、gRPC Chat/Generate 请求读取一份快照，整轮工具链与
+反思保持该快照；保存后的新请求使用新配置，请求级模型覆盖仍具有最高优先级。
+恢复默认值并保存会清空数据库覆盖，重新使用 `llm.yaml`。编辑冲突返回 409，
+需重新加载后保存。配置库故障返回不可用错误，不会静默切回其他模型。
+
+多副本必须连接同一 PostgreSQL 主库，使用相同版本的 `llm.yaml`、Provider
+环境配置和启用开关；异构配置副本混跑不受支持。YAML 本身仍在进程首次使用时
+缓存，修改 YAML/环境变量需要重启；页面保存的模型配置无需重启。数据库覆盖
+跨 Pod 重启及镜像更新保留。现有启动探测仍检查 YAML 中的基础 Profile。
+
+截至 2026-09-10，V4.1 Flash 的正式 ID 为 `deepseek-flash`，三个默认 Chat
+Profile 均已迁移。DeepSeek 官方说明，2026-09-14 12:00（北京时间）后，
+`deepseek-v4-pro` 请求将被路由到 V4.1 Flash。详见
+[官方模型说明](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)。
+SiliconFlow Embedding 配置独立，不受页面修改影响。
+
 请求级模型覆盖使用 `"provider/model_id"` 格式：
 
 | Provider | 示例 |
 |----------|------|
-| `deepseek` | `deepseek/deepseek-v4-pro` |
+| `deepseek` | `deepseek/deepseek-flash` |
 | `siliconflow` | `siliconflow/deepseek-ai/DeepSeek-V4-Pro` |
 | `openai` | `openai/gpt-4o` |
 | `claude` | `claude/claude-opus-4-1` |
@@ -261,9 +289,9 @@ LLM Gateway 和固定 Adapter 处理。
 
 | 用途 | 默认值 |
 |------|--------|
-| `answer` | `deepseek/deepseek-v4-pro`，thinking high，启用工具 |
-| `reflection` | `deepseek/deepseek-v4-flash`，关闭 thinking 与工具 |
-| `agent_dispatch` | `deepseek/deepseek-v4-flash`，关闭 thinking 与工具 |
+| `answer` | `deepseek/deepseek-flash`，thinking high，启用工具 |
+| `reflection` | `deepseek/deepseek-flash`，关闭 thinking 与工具 |
+| `agent_dispatch` | `deepseek/deepseek-flash`，关闭 thinking 与工具 |
 | Embedding 模型 | `siliconflow/Qwen/Qwen3-Embedding-8B` |
 
 同一协议族的新供应商只需在 `llm.yaml` 中选择
@@ -279,6 +307,8 @@ Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消�
 | `HTTP_PORT` | `8080` | HTTP 监听端口 |
 | `GRPC_PORT` | `9090` | gRPC 监听端口 |
 | `LLM_CONFIG_PATH` | `llm.yaml` | LLM Provider 与 Profile 配置文件 |
+| `LLM_RUNTIME_CONFIG_ENABLED` | `false` | 启用 PostgreSQL 模型覆盖与请求配置快照 |
+| `JARVIS_ADMIN_TOKEN` | 空 | 独立管理员 Bearer Token；为空时管理 API 关闭 |
 | `DEEPSEEK_API_KEY` | — | DeepSeek API Key（默认对话必填） |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 接口地址 |
 | `SILICONFLOW_API_KEY` | — | SiliconFlow API Key（默认 Embedding 必填） |

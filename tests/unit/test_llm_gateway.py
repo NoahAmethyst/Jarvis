@@ -101,7 +101,7 @@ def _tool_ai(tool_id: str = "call-1", *, reasoning: str | None = "reasoning"):
     )
 
 
-def test_answer_profile_uses_deepseek_v4_pro(settings, fake_adapters):
+def test_answer_profile_uses_configured_deepseek_model(settings, fake_adapters):
     gateway = _gateway(settings, fake_adapters)
 
     response = gateway.chat(
@@ -112,7 +112,7 @@ def test_answer_profile_uses_deepseek_v4_pro(settings, fake_adapters):
 
     assert response.content == "deepseek answer"
     call = fake_adapters.deepseek.calls[0]
-    assert call.model_id == "deepseek-v4-pro"
+    assert call.model_id == "deepseek-flash"
     assert call.thinking_mode == "enabled"
     assert call.thinking_effort == "high"
     fake_adapters.deepseek.model.bind_tools.assert_called_once_with([fake_tool])
@@ -127,7 +127,7 @@ def test_reflection_profile_does_not_bind_tools(settings, fake_adapters):
     )
 
     call = fake_adapters.deepseek.calls[0]
-    assert call.model_id == "deepseek-v4-flash"
+    assert call.model_id == "deepseek-flash"
     assert call.thinking_mode == "disabled"
     fake_adapters.deepseek.model.bind_tools.assert_not_called()
 
@@ -374,7 +374,7 @@ def test_raw_timeout_is_normalized_and_redacted(
 
     assert str(exc_info.value) == "LLM request timed out"
     assert (
-        "【供应商:deepseek】【模型:deepseek-v4-pro】【结果:失败】"
+        "【供应商:deepseek】【模型:deepseek-flash】【结果:失败】"
         "【错误:APITimeoutError】 LLM request failed"
     ) in caplog.text
 
@@ -497,7 +497,7 @@ def test_402_failure_sends_sanitized_qq_alert(settings, fake_adapters, monkeypat
         _gateway(settings, fake_adapters).chat("answer", [HumanMessage(content="private prompt")])
     notify.assert_called_once()
     message = notify.call_args.args[0]
-    for expected in ("deepseek", "deepseek-v4-pro", "402", "Insufficient Balance", "APIStatusError"):
+    for expected in ("deepseek", "deepseek-flash", "402", "Insufficient Balance", "APIStatusError"):
         assert expected in message
     assert "sk-secret-value" not in message
     assert "private prompt" not in message

@@ -116,13 +116,31 @@ Thresholds come from:
 - Root `llm.yaml`
   - Defines providers, fixed adapter names, capabilities, message limits, and
     behavior Profiles.
-  - `answer`: `deepseek/deepseek-v4-pro`, thinking high, tools enabled.
-  - `reflection` and `agent_dispatch`: `deepseek/deepseek-v4-flash`, thinking
+  - `answer`: `deepseek/deepseek-flash` (V4.1 Flash), thinking high, tools enabled.
+  - `reflection` and `agent_dispatch`: `deepseek/deepseek-flash`, thinking
     and tools disabled.
 - `jarvis/llm/config.py`
   - Strictly validates YAML with Pydantic and splits model specs on the first
     slash.
   - Loads structure without requiring keys for unused optional providers.
+- `jarvis/llm/runtime.py` and `jarvis/api/http/admin.py`
+  - `/admin/models` provides a packaged, same-origin model administration UI.
+  - `LLM_RUNTIME_CONFIG_ENABLED=true` enables PostgreSQL model overrides.
+    A separate nonempty `JARVIS_ADMIN_TOKEN` protects all management APIs.
+  - Only profile model IDs are editable; providers, credentials, capabilities,
+    and thinking/tool settings remain server-controlled. Model IDs are free
+    text, not a hardcoded enum. Optional model discovery supports DeepSeek and
+    OpenAI-compatible providers; Anthropic uses manual entry.
+  - Singleton JSONB mapping + monotonically increasing revision; CAS prevents
+    lost writes. The default restore operation stores an empty mapping.
+  - HTTP Chat and gRPC Chat/Generate pin a ContextVar gateway snapshot for the
+    whole request, including graph tool loops. New requests observe committed
+    changes. Request-specific model overrides retain priority.
+  - Runtime database errors fail closed. Replicas must share the same primary
+    database, base YAML, provider environment, and feature flag. Heterogeneous
+    base configurations are not supported. Startup probes still use base YAML.
+  - Save validates format, provider capabilities, and credential presence but
+    does not prove remote model availability or perform paid chat probes.
 - `jarvis/llm/gateway.py`
   - Is the only production boundary for Profile resolution, capability
     fallback, legal message-group trimming, tool binding, retries, invocation,

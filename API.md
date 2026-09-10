@@ -128,8 +128,8 @@ Schema 是空对象，业务错误状态也未声明。生成客户端后必须�
 {
   "message": "请总结我们之前讨论的部署风险。",
   "user_id": "tenant-a:user-42",
-  "llm": "deepseek/deepseek-v4-pro",
-  "reflect_llm": "deepseek/deepseek-v4-flash"
+  "llm": "deepseek/deepseek-flash",
+  "reflect_llm": "deepseek/deepseek-flash"
 }
 ```
 
@@ -294,6 +294,65 @@ APM、UI 或下游响应。
    重复执行或自行实现去重时，才对可恢复状态进行有上限的退避重试。
 5. 不自动重试 `400`、`422`，不在日志中记录错误响应正文、敏感请求正文、
    密钥或完整用户对话。
+
+### 3.6 模型管理（管理员）
+
+页面：`GET /admin/models`。以下 API 与现有业务 API 不同，全部要求
+`Authorization: Bearer <administrator-token>`。服务器需配置
+`LLM_RUNTIME_CONFIG_ENABLED=true` 和非空 `JARVIS_ADMIN_TOKEN`。通过 HTTPS
+或安全转发访问，不要把 Token 放入 URL、日志或前端持久存储。
+
+`GET /admin/api/models` 返回：
+
+```json
+{
+  "revision": 0,
+  "config_version": "<64-character SHA-256 of the base configuration>",
+  "providers": {"deepseek": {"adapter": "deepseek", "tools": true, "thinking": true}},
+  "profiles": {
+    "answer": {"model": "deepseek/deepseek-flash", "default_model": "deepseek/deepseek-flash", "tools": "enabled", "thinking": "enabled"},
+    "reflection": {"model": "deepseek/deepseek-flash", "default_model": "deepseek/deepseek-flash", "tools": "disabled", "thinking": "disabled"},
+    "agent_dispatch": {"model": "deepseek/deepseek-flash", "default_model": "deepseek/deepseek-flash", "tools": "disabled", "thinking": "disabled"}
+  }
+}
+```
+
+示例省略了其余供应商。返回信息不包含任何 API Key 或管理员 Token。
+
+`PUT /admin/api/models` 提交刚读取的 `revision`、`config_version` 和完整模型映射：
+
+```json
+{
+  "revision": 0,
+  "config_version": "<copy exact value from GET>",
+  "models": {
+    "answer": "deepseek/deepseek-flash",
+    "reflection": "deepseek/deepseek-flash",
+    "agent_dispatch": "deepseek/deepseek-flash"
+  }
+}
+```
+
+成功返回与 GET 相同的结构，`revision` 加一。`models: {}` 清除所有数据库覆盖，
+恢复服务器 YAML 默认值。任意非空映射必须包含服务器的全部 Profile。
+模型标识为 `provider/model_id`，仅接受字母、数字、`_ . : / -`，整体不超过
+200 字符。模型 ID 无固定枚举；Provider 必须已配置，并满足 Profile 的
+thinking/tools 要求及凭据存在检查。保存不执行付费对话探测，也不保证远端
+模型存在或支持工具。Embedding、供应商地址、密钥和思考参数不通过本接口修改。
+
+新 HTTP Chat、gRPC Chat/Generate 请求读取已提交配置；已开始请求的工具链与
+反思使用请求开始时的快照。业务请求显式传入的模型覆盖仍然优先。数据库主库
+持久化覆盖跨 Pod 重启保留，配置库故障返回不可用，不静默退回 YAML。所有副本
+必须使用相同基础配置、环境和主库；不支持异构配置副本混跑。
+
+`GET /admin/api/providers/{name}/models` 从已配置的 DeepSeek/OpenAI 兼容供应商
+获取目录，返回 `{"models": ["deepseek-flash", "..."]}`。不接受调用者指定 URL。
+Anthropic 暂不提供目录发现，使用手动模型 ID。失败可手填后重试保存。
+
+错误格式均为 `{"detail": "..."}`：401 为无效 Token，503 为管理未启用或配置
+存储/供应商不可用，400 为无效配置或不支持的目录发现，404 为未知供应商，
+409 为配置版本冲突，422 为请求体校验失败，429 为目录发现繁忙，502 为上游
+目录查询失败。409 后必须重新 GET；保存响应丢失时先 GET 核对，不要盲目重试。
 
 ## 4. HTTP 客户端示例
 

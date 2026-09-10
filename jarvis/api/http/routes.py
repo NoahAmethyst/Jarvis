@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from jarvis.agent.graph import graph
 from jarvis.agent.state import AgentState
+from jarvis.llm import model_session
+from jarvis.api.http.admin import router as admin_router
 from jarvis.llm.errors import (
     LLMConfigurationError,
     LLMContextLimitError,
@@ -18,6 +20,8 @@ from langchain_core.messages import HumanMessage
 
 app = FastAPI(title="Jarvis", version="0.1.0")
 app.state.ready = False
+
+app.include_router(admin_router)
 
 
 class ChatRequest(BaseModel):
@@ -85,7 +89,8 @@ def chat(req: ChatRequest):
         "unavailable_tools": [],
     }
     try:
-        result = graph.invoke(initial_state)
+        with model_session():
+            result = graph.invoke(initial_state)
     except LLMError as error:
         raise HTTPException(
             status_code=_llm_http_status(error),

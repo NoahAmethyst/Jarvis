@@ -28,6 +28,20 @@ The snapshot above is historical. Always trust the current
 
 ## Active LLM Gateway Work
 
+Update on 2026-09-10: default Chat models migrated to `deepseek-flash`
+(DeepSeek V4.1 Flash). Added `/admin/models` and PostgreSQL-backed runtime
+model selection, with independent administrator authentication and per-request
+configuration snapshots. See README and API.md for activation and contracts.
+Deployment/feature activation still requires user approval. Do not execute
+historical plans or infer that the remote environment has been upgraded.
+Verification: full suite 226 passed; 26 management tests also passed after
+strengthening boundary assertions. Desktop/mobile browser interactions passed.
+Independent review findings were fixed. Real PostgreSQL multi-connection CAS
+and paid provider integration remain unverified. A temporary loopback-only
+preview may run on port 8768 with in-memory demo data, not production settings.
+
+The earlier 2026-07-10 model choices below are historical.
+
 Status on 2026-07-10: implementation is complete locally and committed in
 task-scoped changes. Final automated code review reported `Code ready: Yes`
 with no remaining Critical or Important findings.

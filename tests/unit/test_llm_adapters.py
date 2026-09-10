@@ -41,7 +41,7 @@ def _provider(
 def _deepseek_model(monkeypatch, http_client=None) -> JarvisChatDeepSeek:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     return JarvisChatDeepSeek(
-        model="deepseek-v4-pro",
+        model="deepseek-flash",
         api_key="test-key",
         base_url="https://api.deepseek.com",
         max_retries=0,
@@ -56,7 +56,7 @@ def _tool_call_response(reasoning_content: str, tool_call_id: str) -> dict:
         "id": "chatcmpl-tool",
         "object": "chat.completion",
         "created": 1,
-        "model": "deepseek-v4-pro",
+        "model": "deepseek-flash",
         "choices": [
             {
                 "index": 0,
@@ -87,7 +87,7 @@ def _final_response(content: str) -> dict:
         "id": "chatcmpl-final",
         "object": "chat.completion",
         "created": 2,
-        "model": "deepseek-v4-pro",
+        "model": "deepseek-flash",
         "choices": [
             {
                 "index": 0,
@@ -118,7 +118,7 @@ def test_deepseek_adapter_maps_enabled_thinking(monkeypatch):
 
     model = DeepSeekAdapter().create_model(
         provider=provider,
-        model_id="deepseek-v4-pro",
+        model_id="deepseek-flash",
         thinking=ThinkingSettings(mode="enabled", effort="high"),
     )
 
@@ -141,7 +141,7 @@ def test_deepseek_adapter_maps_disabled_thinking(monkeypatch):
 
     model = DeepSeekAdapter().create_model(
         provider=provider,
-        model_id="deepseek-v4-flash",
+        model_id="deepseek-flash",
         thinking=ThinkingSettings(mode="disabled"),
         request_timeout=10.0,
     )

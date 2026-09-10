@@ -50,19 +50,19 @@ def test_default_profiles_use_direct_deepseek():
     settings = load_llm_config(ROOT / "llm.yaml")
 
     answer = settings.profiles["answer"]
-    assert answer.model == "deepseek/deepseek-v4-pro"
+    assert answer.model == "deepseek/deepseek-flash"
     assert answer.tools == "enabled"
     assert answer.thinking.mode == "enabled"
     assert answer.thinking.effort == "high"
     assert answer.thinking.on_unsupported == "disable"
 
     reflection = settings.profiles["reflection"]
-    assert reflection.model == "deepseek/deepseek-v4-flash"
+    assert reflection.model == "deepseek/deepseek-flash"
     assert reflection.tools == "disabled"
     assert reflection.thinking.mode == "disabled"
 
     dispatch = settings.profiles["agent_dispatch"]
-    assert dispatch.model == "deepseek/deepseek-v4-flash"
+    assert dispatch.model == "deepseek/deepseek-flash"
     assert dispatch.tools == "disabled"
     assert dispatch.thinking.mode == "disabled"
 

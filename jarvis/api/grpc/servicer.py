@@ -8,6 +8,7 @@ from jarvis.agent.nodes.plan_and_call import plan_and_call
 from jarvis.agent.nodes.rag_retrieve import rag_retrieve
 from jarvis.agent.nodes.tool_execute import execute_tools
 from jarvis.agent.state import AgentState
+from jarvis.llm import model_session
 from jarvis.llm.errors import (
     LLMConfigurationError,
     LLMContextLimitError,
@@ -121,7 +122,8 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             "unavailable_tools": [],
         }
         try:
-            result = graph.invoke(initial_state)
+            with model_session():
+                result = graph.invoke(initial_state)
         except LLMError as error:
             context.set_code(_llm_grpc_status(error))
             context.set_details(str(error))
@@ -146,7 +148,8 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
 
     def Generate(self, request, context):
         try:
-            text = _run_stateless_generate(request)
+            with model_session():
+                text = _run_stateless_generate(request)
         except LLMError as error:
             context.set_code(_llm_grpc_status(error))
             context.set_details(str(error))

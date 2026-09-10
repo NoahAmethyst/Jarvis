@@ -17,6 +17,13 @@ def init_db():
     try:
         with conn.cursor() as cur:
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS llm_runtime_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    revision BIGINT NOT NULL,
+                    models JSONB NOT NULL
+                )
+            """)
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id SERIAL PRIMARY KEY,
                     user_id TEXT NOT NULL,

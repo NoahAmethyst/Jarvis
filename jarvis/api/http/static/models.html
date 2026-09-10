@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模型配置 · Jarvis</title>
+  <link rel="stylesheet" href="/admin/assets/models.css">
+  <script src="/admin/assets/models.js" defer></script>
+</head>
+<body>
+  <header><a href="/admin/models" class="brand">J<span>Jarvis</span></a><span class="console">管理控制台</span><button id="logout" hidden>退出</button></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">模型与供应商</p><h1>模型配置</h1></div><span id="version" class="version">未连接</span></div>
+    <section id="login">
+      <h2>管理员登录</h2>
+      <form id="login-form"><label for="token">管理员 Token</label><div class="login-fields"><input id="token" type="password" autocomplete="off" required maxlength="4096"><button class="primary" type="submit">连接</button></div></form>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <form id="editor" hidden>
+      <div class="section-heading"><h2>对话任务</h2><button id="reload" type="button" title="重新加载" aria-label="重新加载"><img src="/admin/assets/reload.svg" width="18" height="18" alt=""></button></div>
+      <div id="profiles"></div>
+      <footer><button id="defaults" type="button">恢复默认值</button><span id="dirty"></span><button id="save" type="submit" class="primary" disabled>保存配置</button></footer>
+    </form>
+  </main>
+</body>
+</html>
