@@ -58,3 +58,14 @@ def test_external_llm_config_mount_and_generator_agree():
     assert config["data"]["LLM_CONFIG_PATH"] == mount["mountPath"] + "/llm.yaml"
     assert volume["configMap"]["items"] == [{"key": "llm.yaml", "path": "llm.yaml"}]
     assert not generator.get("generatorOptions", {}).get("disableNameSuffixHash", False)
+
+
+def test_model_administration_uses_separate_secret_reference():
+    documents = list(yaml.safe_load_all((ROOT / "jarvis.yaml").read_text()))
+    config = next(doc for doc in documents if doc and doc.get("kind") == "ConfigMap")
+    assert config["data"]["LLM_RUNTIME_CONFIG_ENABLED"] == "true"
+    assert "JARVIS_ADMIN_TOKEN" not in config["data"]
+    env = next(e for e in _jarvis_container()["env"] if e["name"] == "JARVIS_ADMIN_TOKEN")
+    assert "value" not in env
+    assert env["valueFrom"]["secretKeyRef"] == {"name": "jarvis-admin", "key": "JARVIS_ADMIN_TOKEN"}
+    assert not any(doc and doc.get("kind") == "Secret" for doc in documents)

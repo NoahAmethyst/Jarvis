@@ -179,15 +179,21 @@ Deployment 更新，使进程重新加载基础配置。单纯同步文件不会
 
 清单引用的 `jarvis-secrets` 必须通过集群的安全凭据流程预先创建。不要把真实
 API Key、数据库密码、Token 或 kubeconfig 写入 `jarvis.yaml`、`llm.yaml` 或
-Git 提交。凭据准备完成后可应用清单：
+Git 提交。模型管理另用 `jarvis-admin` Secret 的 `JARVIS_ADMIN_TOKEN` 键，
+部署清单已开启 `LLM_RUNTIME_CONFIG_ENABLED=true`。远端管理员 Secret 文件
+`/root/jarvis/jarvis-admin.secret.yaml` 只保留在服务器，权限为 0600，不提交 Git，
+也不添加到仓库的 `kustomization.yaml`。首次启用或轮换 Token 时，在获得部署
+授权后先应用 Secret，再应用其余清单；不要把 Secret 渲染结果输出到公开日志：
 
 ```bash
+kubectl apply -f /root/jarvis/jarvis-admin.secret.yaml
 kubectl apply -k /root/jarvis
 kubectl rollout status deployment/jarvis --timeout=180s
 ```
 
 本地操作可将 `/root/jarvis` 替换为当前仓库目录。自动镜像发布工作流只更新
 Pod，不会同步或应用这些配置文件，配置变更需通过上述独立流程执行。
+单独轮换 Secret 值后还需滚动重启 Deployment，环境变量才会重新读取。
 
 ## HTTP API
 

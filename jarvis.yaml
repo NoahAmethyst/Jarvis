@@ -14,6 +14,7 @@ data:
   HTTP_PORT: "8080"
   GRPC_PORT: "9090"
   LLM_CONFIG_PATH: "/etc/jarvis/llm.yaml"
+  LLM_RUNTIME_CONFIG_ENABLED: "true"
   QQBOT_GRPC_TARGET: "qq-bot:9090"
   LLM_ERROR_QQ_USER_ID: ""
   DEEPSEEK_BASE_URL: "https://api.deepseek.com"
@@ -72,6 +73,12 @@ spec:
                 name: jarvis-config
             - secretRef:
                 name: jarvis-secrets
+          env:
+            - name: JARVIS_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-admin
+                  key: JARVIS_ADMIN_TOKEN
           readinessProbe:
             httpGet:
               path: /health/ready

@@ -329,6 +329,12 @@ Thresholds come from:
     never changes live resources. Old hashed ConfigMaps require later cleanup.
   - The mounted file is the base configuration; runtime PostgreSQL overrides
     remain higher priority and are visible in the model administration API.
+  - Deployment enables `LLM_RUNTIME_CONFIG_ENABLED=true` and references
+    `jarvis-admin` Secret key `JARVIS_ADMIN_TOKEN` explicitly. Its real value
+    must never enter Git or memory. The remote-only 0600 manifest is
+    `/root/jarvis/jarvis-admin.secret.yaml`; apply it before the Kustomize
+    directory after deployment authorization. File sync alone does not enable
+    management on live Pods. Secret-only rotations require a rolling restart.
   - Service type is NodePort. The application itself binds HTTP to
     `0.0.0.0:8080` and plaintext gRPC to `[::]:9090`; network isolation is
     required because the application has no authentication or TLS.

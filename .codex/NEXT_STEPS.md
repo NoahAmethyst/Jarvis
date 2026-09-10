@@ -54,6 +54,17 @@ Both local and remote offline Kustomize rendering passed, along with 19 focused
 tests and independent code review. No `apply`, Pod deletion, restart, image build,
 or push was executed. The live Deployment has NOT yet acquired this mount.
 
+Administrator configuration follow-up: remote `jarvis-admin.secret.yaml` was
+provisioned with the user-specified Token via hidden input and encrypted SSH,
+verified without displaying its contents, and protected with mode 0600. Never
+record the Token value in memory or Git. Remote `jarvis.yaml` now enables runtime
+configuration and references the separate `jarvis-admin` Secret. Previous
+manifest backup: `/root/jarvis/jarvis.yaml.before-20260910-admin`.
+No Secret or Deployment apply was executed: file synchronization does not make
+these changes active. Apply Secret first, then Kustomize, only after explicit
+authorization. A code push triggers the existing image/Pod workflow but does not
+apply these files. Related tests: 31 passed; independent config review passed.
+
 The earlier 2026-07-10 model choices below are historical.
 
 Status on 2026-07-10: implementation is complete locally and committed in
