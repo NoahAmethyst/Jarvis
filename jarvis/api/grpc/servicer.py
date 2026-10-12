@@ -9,6 +9,7 @@ from jarvis.agent.nodes.rag_retrieve import rag_retrieve
 from jarvis.agent.nodes.tool_execute import execute_tools
 from jarvis.agent.state import AgentState
 from jarvis.llm import model_session
+from jarvis.execution_logging import traced_request
 from jarvis.llm.errors import (
     LLMConfigurationError,
     LLMContextLimitError,
@@ -83,6 +84,14 @@ def _run_stateless_generate(request) -> str:
     state = _generate_initial_state(request)
     if not request.disable_rag:
         state.update(rag_retrieve(state))
+    else:
+        logger.info("%s", format_log_tags(
+            ("节点", "rag_retrieve"), ("状态", "跳过"), ("原因", "请求关闭RAG"),
+        ))
+    if request.disable_tools:
+        logger.info("%s", format_log_tags(
+            ("节点", "tool_node"), ("状态", "跳过"), ("原因", "请求关闭工具"),
+        ))
 
     for _ in range(GENERATE_MAX_TOOL_ROUNDS + 1):
         plan_update = plan_and_call(state)
@@ -104,6 +113,7 @@ def _run_stateless_generate(request) -> str:
 
 class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
 
+    @traced_request("gRPC.Chat", grpc=True)
     def Chat(self, request, context):
         initial_state: AgentState = {
             "messages": [HumanMessage(content=request.message)],
@@ -146,6 +156,7 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             low_confidence=result["low_confidence"],
         )
 
+    @traced_request("gRPC.Generate", grpc=True)
     def Generate(self, request, context):
         try:
             with model_session():
@@ -170,6 +181,7 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             return jarvis_pb2.GenerateResponse()
         return jarvis_pb2.GenerateResponse(text=text)
 
+    @traced_request("gRPC.Ingest", grpc=True)
     def Ingest(self, request, context):
         try:
             know_mem.store_knowledge(request.content, request.source_url, request.user_id)

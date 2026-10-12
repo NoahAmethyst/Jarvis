@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from jarvis.agent.graph import graph
 from jarvis.agent.state import AgentState
 from jarvis.llm import model_session
+from jarvis.execution_logging import traced_request
 from jarvis.api.http.admin import router as admin_router
 from jarvis.llm.errors import (
     LLMConfigurationError,
@@ -71,6 +72,7 @@ def _llm_http_status(error: LLMError) -> int:
 
 
 @app.post("/chat", response_model=ChatResponse)
+@traced_request("HTTP.Chat")
 def chat(req: ChatRequest):
     initial_state: AgentState = {
         "messages": [HumanMessage(content=req.message)],
@@ -100,6 +102,7 @@ def chat(req: ChatRequest):
 
 
 @app.post("/ingest")
+@traced_request("HTTP.Ingest")
 def ingest(req: IngestRequest):
     try:
         know_mem.store_knowledge(req.content, req.source_url, req.user_id)

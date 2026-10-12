@@ -1,3 +1,4 @@
+import logging
 import requests
 from jarvis.config import TAVILY_API_KEY
 from jarvis.tools.errors import (
@@ -5,6 +6,10 @@ from jarvis.tools.errors import (
     raise_for_tool_status,
 )
 from jarvis.tools.registry import register_tool
+from jarvis.logging_config import format_log_tags
+
+
+logger = logging.getLogger(__name__)
 
 
 @register_tool(
@@ -37,6 +42,9 @@ def web_search(query: str) -> str:
         ) from None
     raise_for_tool_status(resp, "web_search")
     results = resp.json().get("results", [])
+    logger.info("%s", format_log_tags(
+        ("动作", "网络搜索结果"), ("工具", "web_search"), ("结果条数", len(results)),
+    ))
     return "\n\n".join(
         f"Title: {r['title']}\nURL: {r['url']}\n{r['content']}" for r in results
     )

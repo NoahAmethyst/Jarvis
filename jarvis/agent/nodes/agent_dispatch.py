@@ -4,13 +4,16 @@ from jarvis.agents.loader import load_agents
 from jarvis.agents.dispatcher import dispatch_agent
 from jarvis.config import AGENTS_DIR, AGENT_DISPATCH_THRESHOLD
 from jarvis.logging_config import format_log_tags
+from jarvis.execution_logging import traced_node, node_feedback
 
 logger = logging.getLogger(__name__)
 
 
+@traced_node("agent_dispatch")
 def agent_dispatch(state: AgentState) -> dict:
     try:
         agents = load_agents(AGENTS_DIR)
+        node_feedback(候选Agent数=len(agents))
         if not agents:
             return {"active_agent": None, "agent_dispatch_score": 0.0}
 
@@ -22,6 +25,7 @@ def agent_dispatch(state: AgentState) -> dict:
         )
         return {"active_agent": selected, "agent_dispatch_score": score}
     except Exception as error:
+        node_feedback(状态="降级")
         logger.warning(
             "%s Agent dispatch node failed, using default behavior",
             format_log_tags(

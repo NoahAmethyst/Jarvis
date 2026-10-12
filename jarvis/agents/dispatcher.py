@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage
 from jarvis.agents import AgentDefinition
 from jarvis.llm import llm
 from jarvis.logging_config import format_log_tags
+from jarvis.execution_logging import node_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ def dispatch_agent(
                 )
 
         if not scored:
+            node_feedback(状态="降级")
             logger.warning(
                 "%s No Agent scores available, using default behavior",
                 format_log_tags(
@@ -98,6 +100,7 @@ def dispatch_agent(
         return best_agent, best_score
 
     except Exception as error:
+        node_feedback(状态="降级")
         logger.warning(
             "%s Agent dispatch failed, using default behavior",
             format_log_tags(

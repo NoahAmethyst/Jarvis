@@ -29,6 +29,7 @@ from jarvis.llm.errors import (
     LLMUnavailableError,
 )
 from jarvis.logging_config import format_log_tags, sanitize_log_value
+from jarvis.execution_logging import action_trace
 
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ class LLMGateway:
             provider_name=provider_name,
             model_id=model_id,
             profile=profile_settings,
+            profile_name=profile,
             thinking=thinking,
             messages=prepared_messages,
             tools=list(tools or []),
@@ -242,32 +244,39 @@ class LLMGateway:
         provider_name: str,
         model_id: str,
         profile: ProfileSettings,
+        profile_name: str,
         thinking: ThinkingSettings,
         messages: list[BaseMessage],
         tools: list[BaseTool],
     ) -> AIMessage:
         for attempt in range(profile.retry.max_attempts):
             try:
-                model = adapter.create_model(provider, model_id, thinking)
-                runnable = (
-                    model.bind_tools(tools)
-                    if profile.tools == "enabled" and tools
-                    else model
-                )
-                response = runnable.invoke(messages)
-                if not isinstance(response, AIMessage):
-                    raise LLMInvalidResponseError(
-                        "LLM provider returned an invalid response"
+                with action_trace(
+                    "调用LLM", Profile=profile_name, 供应商=provider_name,
+                    模型=model_id, 尝试=f"{attempt + 1}/{profile.retry.max_attempts}",
+                    消息数=len(messages), 工具数=len(tools),
+                ) as feedback:
+                    model = adapter.create_model(provider, model_id, thinking)
+                    runnable = (
+                        model.bind_tools(tools)
+                        if profile.tools == "enabled" and tools
+                        else model
                     )
-                if (
-                    provider.adapter == "deepseek"
-                    and thinking.mode == "enabled"
-                    and response.tool_calls
-                    and not response.additional_kwargs.get("reasoning_content")
-                ):
-                    raise LLMInvalidResponseError(
-                        "LLM provider returned an invalid response"
-                    )
+                    response = runnable.invoke(messages)
+                    if not isinstance(response, AIMessage):
+                        raise LLMInvalidResponseError(
+                            "LLM provider returned an invalid response"
+                        )
+                    if (
+                        provider.adapter == "deepseek"
+                        and thinking.mode == "enabled"
+                        and response.tool_calls
+                        and not response.additional_kwargs.get("reasoning_content")
+                    ):
+                        raise LLMInvalidResponseError(
+                            "LLM provider returned an invalid response"
+                        )
+                    feedback.update(回复字符数=len(response.content), 工具调用数=len(response.tool_calls))
                 return response
             except Exception as error:
                 normalized = normalize_provider_error(error)

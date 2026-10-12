@@ -1,4 +1,6 @@
 import inspect
+import logging
+import re
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -26,7 +28,8 @@ def client():
         yield TestClient(app)
 
 
-def test_chat_returns_answer(client):
+def test_chat_returns_answer(client, caplog):
+    caplog.set_level(logging.INFO)
     with patch(
         "jarvis.agent.nodes.plan_and_call.llm.chat",
         side_effect=[
@@ -40,6 +43,12 @@ def test_chat_returns_answer(client):
     data = resp.json()
     assert data["answer"] == "Paris is the capital of France."
     assert data["low_confidence"] is False
+    assert "【方法:HTTP.Chat】" in caplog.text
+    assert "【评分:0.95】" in caplog.text
+    ids = re.findall(r"【请求ID:([^】]+)】", caplog.text)
+    assert len(ids) > 10 and len(set(ids)) == 1
+    assert "Capital of France?" not in caplog.text
+    assert "Paris is the capital of France." not in caplog.text
 
 
 def test_liveness_is_available(client):

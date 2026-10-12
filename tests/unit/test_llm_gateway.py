@@ -322,7 +322,8 @@ def test_deepseek_tool_response_requires_reasoning(settings, fake_adapters):
     assert fake_adapters.deepseek.model.invoke.call_count == 1
 
 
-def test_transient_error_retries_up_to_profile_limit(settings, fake_adapters):
+def test_transient_error_retries_up_to_profile_limit(settings, fake_adapters, caplog):
+    caplog.set_level(logging.INFO)
     fake_adapters.deepseek.model.invoke.side_effect = [
         LLMTimeoutError("LLM request timed out"),
         AIMessage(content="recovered"),
@@ -339,6 +340,10 @@ def test_transient_error_retries_up_to_profile_limit(settings, fake_adapters):
     assert response.content == "recovered"
     assert fake_adapters.deepseek.model.invoke.call_count == 2
     assert sleeps == [0.25]
+    assert "【动作:调用LLM】" in caplog.text
+    assert "【Profile:answer】" in caplog.text
+    assert "【尝试:1/2】" in caplog.text and "【尝试:2/2】" in caplog.text
+    assert "【状态:失败】" in caplog.text and "【状态:完成】" in caplog.text
 
 
 def test_invalid_response_is_not_retried(settings, fake_adapters):

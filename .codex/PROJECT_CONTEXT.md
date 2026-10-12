@@ -270,10 +270,29 @@ Thresholds come from:
   `docs/superpowers/specs/2026-06-18-agent-dispatch-design.md`, and the
   `docs/study` learning materials.
 
+## Request Execution Logging
+
+- `jarvis/execution_logging.py` supplies request and action scopes and node wrappers.
+  HTTP Chat/Ingest and gRPC Chat/Generate/Ingest generate a UUID per invocation.
+  ContextVars propagate the request ID to LangGraph execution workers and reset on exit.
+- `format_log_tags` adds the request ID and current node to tagged events; ordinary
+  access logs and health filtering retain their existing behavior.
+- Every node emits start/end, elapsed milliseconds and safe result metadata.
+  LLM attempts include Profile, effective provider/model and retry attempt. Tools
+  include result sizes or unavailability; Qdrant includes hit/write counts.
+- `memory_write` reports actual successful history/knowledge writes, skipped
+  candidates and partial-write degradation. Knowledge validation here means only
+  the strict length threshold, not fact checking or a new LLM validation stage.
+- Generate continues to bypass reflection and persistence, with explicit skip
+  logs for request-disabled RAG/tools. The request ID is logged, not returned by APIs.
+- Validation: `tests/unit/test_execution_logging.py` and existing HTTP, Gateway,
+  graph, tool and memory tests exercise correlation, outcomes and content exclusion.
+
 ## Tests
 
 - Unit:
   - `tests/unit/test_logging_config.py`
+  - `tests/unit/test_execution_logging.py`
   - `tests/unit/test_main.py`
   - `tests/unit/test_startup_checks.py`
   - `tests/unit/test_llm_config.py`

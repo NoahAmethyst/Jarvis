@@ -4,12 +4,14 @@ from langchain_core.messages import SystemMessage
 from jarvis.agent.state import AgentState
 from jarvis.llm import llm
 from jarvis.logging_config import format_log_tags
+from jarvis.execution_logging import traced_node, node_feedback
 from jarvis.tools.registry import get_tools
 
 
 logger = logging.getLogger(__name__)
 
 
+@traced_node("plan_and_call")
 def plan_and_call(state: AgentState) -> dict:
     try:
         system_content = "You are Jarvis, a helpful AI assistant. Answer questions accurately and completely."
@@ -23,6 +25,12 @@ def plan_and_call(state: AgentState) -> dict:
             get_tools(excluded_names=state.get("unavailable_tools", []))
             if state.get("tools_enabled", True)
             else []
+        )
+        node_feedback(
+            历史条数=len(state["history"]),
+            使用RAG=bool(state.get("rag_context")),
+            使用Agent=bool(state.get("active_agent")),
+            可用工具数=len(tools),
         )
         response = llm.chat(
             profile="answer",

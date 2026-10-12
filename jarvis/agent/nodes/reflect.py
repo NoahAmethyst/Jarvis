@@ -5,6 +5,7 @@ from jarvis.agent.state import AgentState
 from jarvis.config import REFLECTION_SCORE_THRESHOLD, REFLECTION_MAX_RETRIES
 from jarvis.llm import llm
 from jarvis.logging_config import format_log_tags
+from jarvis.execution_logging import traced_node
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ def _extract_last_ai_answer(state: AgentState) -> str:
     return ""
 
 
+@traced_node("reflect")
 def reflect(state: AgentState) -> dict:
     try:
         answer = _extract_last_ai_answer(state)

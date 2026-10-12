@@ -10,6 +10,7 @@ from jarvis.config import (
 )
 from jarvis.llm.errors import LLMConfigurationError, LLMCredentialError
 from jarvis.logging_config import format_log_tags
+from jarvis.execution_logging import action_trace
 
 logger = logging.getLogger(__name__)
 COLLECTION_NAME = "jarvis_knowledge"
@@ -77,39 +78,47 @@ def init_collection():
 
 
 def store_knowledge(text: str, source_url: str, user_id: str):
-    embeddings = _get_embeddings()
-    vector = embeddings.embed_query(text)
+    with action_trace("知识向量生成", 模型=EMBED_MODEL, 字符数=len(text)) as feedback:
+        embeddings = _get_embeddings()
+        vector = embeddings.embed_query(text)
+        feedback["向量维度"] = len(vector)
     client = _get_client()
     key = f"{user_id}:{source_url}:{text}"
     point_id = int(hashlib.sha256(key.encode()).hexdigest(), 16) % (2**63)
-    client.upsert(
-        collection_name=COLLECTION_NAME,
-        points=[PointStruct(
-            id=point_id,
-            vector=vector,
-            payload={
-                "text": text,
-                "source_url": source_url,
-                "user_id": user_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-        )],
-    )
+    with action_trace("知识落库", 组件="Qdrant", 集合=COLLECTION_NAME) as feedback:
+        client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=[PointStruct(
+                id=point_id,
+                vector=vector,
+                payload={
+                    "text": text,
+                    "source_url": source_url,
+                    "user_id": user_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )],
+        )
+        feedback["写入数"] = 1
 
 
 def retrieve_knowledge(query: str, user_id: str, top_k: int = 5) -> str:
-    embeddings = _get_embeddings()
-    vector = embeddings.embed_query(query)
+    with action_trace("检索向量生成", 模型=EMBED_MODEL) as feedback:
+        embeddings = _get_embeddings()
+        vector = embeddings.embed_query(query)
+        feedback["向量维度"] = len(vector)
     client = _get_client()
-    response = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=vector,
-        query_filter=Filter(
-            must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
-        ),
-        limit=top_k,
-    )
-    results = response.points
-    if not results:
-        return ""
-    return "\n\n---\n\n".join(r.payload["text"] for r in results)
+    with action_trace("查询知识库", 组件="Qdrant", TopK=top_k) as feedback:
+        response = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=vector,
+            query_filter=Filter(
+                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+            ),
+            limit=top_k,
+        )
+        results = response.points
+        feedback["命中数"] = len(results)
+        context = "\n\n---\n\n".join(r.payload["text"] for r in results)
+        feedback["知识字符数"] = len(context)
+        return context

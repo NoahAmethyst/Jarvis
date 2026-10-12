@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import unicodedata
+from contextvars import ContextVar
 
 
 LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -20,6 +21,8 @@ LEVEL_COLORS = {
 }
 MAX_LOG_TAG_PART_LENGTH = 160
 MAX_LOG_DETAIL_LENGTH = 500
+REQUEST_ID = ContextVar("jarvis_request_id", default=None)
+NODE_NAME = ContextVar("jarvis_node_name", default=None)
 SECRET_PATTERNS = (
     re.compile(r"(?i)\b(api[_-]?key|token|password|secret)\s*[:=]\s*[^,\s;}\]]+"),
     re.compile(r"(?i)\b(authorization)\s*[:=]\s*bearer\s+[A-Za-z0-9._~+/\-]+=*"),
@@ -53,6 +56,10 @@ def _safe_tag_part(value: object) -> str:
 
 
 def format_log_tags(*fields: tuple[str, object]) -> str:
+    if REQUEST_ID.get() is not None:
+        fields = (("请求ID", REQUEST_ID.get()),) + fields
+    if NODE_NAME.get() is not None and not any(name == "节点" for name, _ in fields):
+        fields += (("节点", NODE_NAME.get()),)
     return "".join(
         f"【{_safe_tag_part(name)}:{_safe_tag_part(value)}】"
         for name, value in fields
