@@ -26,6 +26,37 @@ Treat these as pre-existing changes. The `.codex` commit should stage only
 The snapshot above is historical. Always trust the current
 `git status --short --branch` output over this block.
 
+## Request Execution Logging — 2026-10-12
+
+Status: in progress. Implementation, automated verification and image publication
+are complete; activation on the designated server is blocked on explicit restart
+authorization.
+
+- Requirement: every LangGraph node and its internal LLM, knowledge, network-tool,
+  scoring, eligibility-check and persistence actions must report request-correlated
+  outcomes. All seven current graph nodes now have start/end, timing and feedback.
+- Published implementation: `ac72817` on GitHub master. Source lives in
+  `jarvis/execution_logging.py`; usage and outcome fields are documented in README.
+- Verification: 238 tests passed in the isolated publication checkout, including
+  request isolation, real graph tool loops, reflection retries, partial persistence
+  and HTTP/gRPC error outcomes. The normal paths use mocked external dependencies;
+  no paid provider acceptance test was performed.
+- Docker Image CI `38249925839` succeeded and published image manifest
+  `sha256:87dd90e45e69efd4126523ae9ac06cbb427145dfb5e29fd128febe0cb6344cac`.
+- Update App `38250154200` succeeded but its log deleted Pod
+  `jarvis-775cfc9888-m6hkv`. Read-only SSH verification on `1.15.231.125`
+  found `jarvis-8b8bbbb87-6542q`, created 2026-09-10, still running manifest
+  `sha256:f24540ad7cebdd737f55c0655d0f4536918c9b31e9bfd2cd1a21909dd89dee22`.
+  It was Ready 1/1 with zero restarts but lacked the new execution logging module.
+  Therefore workflow success does not establish activation on the designated server.
+- Remaining work: after explicit authorization, roll the `default/jarvis`
+  Deployment on that server, verify the new code/digest and exercise a no-model-call
+  Generate error path with RAG/tools disabled. Inspect CI's actual cluster target
+  separately; this task has not changed deployment workflows or cluster configuration.
+- Knowledge validation logs describe the existing strict length threshold only;
+  no new LLM fact-checking behavior was added. Generate still bypasses reflection
+  and conversation/knowledge persistence.
+
 ## Active LLM Gateway Work
 
 Update on 2026-09-10: default Chat models migrated to `deepseek-flash`
@@ -137,9 +168,10 @@ with no remaining Critical or Important findings.
    - Because Jarvis will deploy to a remote server, ask the user before any
      Docker image build, image push, Docker Compose action, `kubectl` command,
      SSH command, or remote server change.
-5. Improve observability. Status: pending.
-   - Consider structured logs for selected agent, score, retries, tool calls,
-     and degraded memory/RAG paths.
+5. Improve observability. Status: in progress on 2026-10-12.
+   - All-node request-correlated logs are implemented, tested and published.
+     Activation on the designated server remains blocked; see the execution
+     logging update above for evidence and the required next step.
 6. Clarify Memory/RAG persistence behavior. Status: pending.
    - Current automatic knowledge writing stores any long `ToolMessage`, not
      only web search/scrape results.
