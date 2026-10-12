@@ -287,6 +287,10 @@ Thresholds come from:
   logs for request-disabled RAG/tools. The request ID is logged, not returned by APIs.
 - Validation: `tests/unit/test_execution_logging.py` and existing HTTP, Gateway,
   graph, tool and memory tests exercise correlation, outcomes and content exclusion.
+- gRPC handlers explicitly record their error status in request feedback when
+  setting the response code. Do not infer it via a context.code getter: the aio
+  server's sync-handler context does not expose that method. Real network coverage
+  is in `tests/integration/test_grpc_execution_logging.py`.
 
 ## Tests
 

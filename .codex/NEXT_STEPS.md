@@ -28,19 +28,18 @@ The snapshot above is historical. Always trust the current
 
 ## Request Execution Logging — 2026-10-12
 
-Status: in progress. Implementation, automated verification and image publication
-are complete; activation on the designated server is blocked on explicit restart
-authorization.
+Status: done. Implementation, verification, publication and activation on the
+designated server are complete after the user explicitly authorized deployment.
 
 - Requirement: every LangGraph node and its internal LLM, knowledge, network-tool,
   scoring, eligibility-check and persistence actions must report request-correlated
   outcomes. All seven current graph nodes now have start/end, timing and feedback.
-- Published implementation: `ac72817` on GitHub master. Source lives in
+- Published implementation: `ac72817`, followed by fix `89882ae`, on GitHub master. Source lives in
   `jarvis/execution_logging.py`; usage and outcome fields are documented in README.
-- Verification: 238 tests passed in the isolated publication checkout, including
+- Verification: 242 tests passed, including
   request isolation, real graph tool loops, reflection retries, partial persistence
-  and HTTP/gRPC error outcomes. The normal paths use mocked external dependencies;
-  no paid provider acceptance test was performed.
+  and HTTP/gRPC error outcomes. Four new real grpc.aio network tests reproduce
+  the server's sync-handler context and verify both failure and success summaries.
 - Docker Image CI `38249925839` succeeded and published image manifest
   `sha256:87dd90e45e69efd4126523ae9ac06cbb427145dfb5e29fd128febe0cb6344cac`.
 - Update App `38250154200` succeeded but its log deleted Pod
@@ -49,10 +48,36 @@ authorization.
   `sha256:f24540ad7cebdd737f55c0655d0f4536918c9b31e9bfd2cd1a21909dd89dee22`.
   It was Ready 1/1 with zero restarts but lacked the new execution logging module.
   Therefore workflow success does not establish activation on the designated server.
-- Remaining work: after explicit authorization, roll the `default/jarvis`
-  Deployment on that server, verify the new code/digest and exercise a no-model-call
-  Generate error path with RAG/tools disabled. Inspect CI's actual cluster target
-  separately; this task has not changed deployment workflows or cluster configuration.
+- After explicit deployment authorization, rolled `default/jarvis` on
+  `1.15.231.125`. Live verification found gRPC's sync-handler context does not
+  expose the status getter used by the initial trace wrapper, so error summaries
+  falsely said completed. Fixed by explicitly recording status where the handler
+  sets its gRPC error code; failure summaries now use ERROR level.
+- Fix CI `38259246099` and Update App `38259407377` succeeded. The designated
+  server was then explicitly rolled to the fixed version, independently of CI's
+  mismatched update target. Its final Pod is `jarvis-85786c8d7c-sxfcb`, Running,
+  Ready 1/1, zero restarts; Deployment generation and observed generation are 9/9.
+- Running image manifest:
+  `sha256:7bea7612f085787358d3ed17b9e2c51d10412c30c681ce5c68542417fa8f8be9`.
+  SHA-256 checks for execution_logging.py, grpc/servicer.py and llm/gateway.py
+  match the published source. Public NodePort health/live and health/ready returned 200.
+- Real service validation used isolated test users `deployment-smoke-20261012`
+  and `deployment-smoke-20261012-final`, each writing two test conversation records.
+  The fixed Generate invalid-provider request (RAG/tools disabled) returned
+  INVALID_ARGUMENT and logged an ERROR request summary with that code;
+  request ID `1665b8069ba145f796d71c53043755bf`.
+- Final real Chat returned the correct arithmetic answer, low_confidence=false,
+  with six executed nodes, reflection score 1.00, no degraded nodes and two
+  successful PostgreSQL history writes. It made no tool calls or knowledge writes;
+  request ID `ca7adae4951b478895a5adb86a8e455a`.
+  All-node tool-loop and knowledge-persistence paths remain covered by automated tests.
+- Observed performance, not a diagnosed persistent issue: final Chat took 37.2s,
+  including 34.1s for the retrieval embedding. The earlier smoke Chat took 3.2s.
+  No latency tuning was performed in this task.
+- Separate follow-up: investigate CI's update target. Read-only listing found
+  only the default namespace Jarvis instance on the designated cluster, while
+  workflow logs name a different Pod. Do not infer a specific alternate server
+  or alter CI secrets without further evidence and authorization.
 - Knowledge validation logs describe the existing strict length threshold only;
   no new LLM fact-checking behavior was added. Generate still bypasses reflection
   and conversation/knowledge persistence.
@@ -168,10 +193,10 @@ with no remaining Critical or Important findings.
    - Because Jarvis will deploy to a remote server, ask the user before any
      Docker image build, image push, Docker Compose action, `kubectl` command,
      SSH command, or remote server change.
-5. Improve observability. Status: in progress on 2026-10-12.
-   - All-node request-correlated logs are implemented, tested and published.
-     Activation on the designated server remains blocked; see the execution
-     logging update above for evidence and the required next step.
+5. Improve observability. Status: done for the confirmed all-node logging scope.
+   - Request-correlated logs are implemented, tested, published and verified on
+     the designated server. See the execution logging update above for evidence
+     and the separate CI-target and performance observations.
 6. Clarify Memory/RAG persistence behavior. Status: pending.
    - Current automatic knowledge writing stores any long `ToolMessage`, not
      only web search/scrape results.
