@@ -9,7 +9,7 @@ from jarvis.agent.nodes.rag_retrieve import rag_retrieve
 from jarvis.agent.nodes.tool_execute import execute_tools
 from jarvis.agent.state import AgentState
 from jarvis.llm import model_session
-from jarvis.execution_logging import traced_request
+from jarvis.execution_logging import traced_request, request_feedback
 from jarvis.llm.errors import (
     LLMConfigurationError,
     LLMContextLimitError,
@@ -28,6 +28,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 GENERATE_MAX_TOOL_ROUNDS = 6
+
+
+def _set_error_code(context, status) -> None:
+    context.set_code(status)
+    request_feedback(状态="失败", 状态码=status.name)
 
 
 def _error_location(error: Exception) -> str:
@@ -113,7 +118,7 @@ def _run_stateless_generate(request) -> str:
 
 class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
 
-    @traced_request("gRPC.Chat", grpc=True)
+    @traced_request("gRPC.Chat")
     def Chat(self, request, context):
         initial_state: AgentState = {
             "messages": [HumanMessage(content=request.message)],
@@ -135,7 +140,7 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             with model_session():
                 result = graph.invoke(initial_state)
         except LLMError as error:
-            context.set_code(_llm_grpc_status(error))
+            _set_error_code(context, _llm_grpc_status(error))
             context.set_details(str(error))
             return jarvis_pb2.ChatResponse()
         except Exception as error:
@@ -148,7 +153,7 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
                     ("位置", _error_location(error)),
                 ),
             )
-            context.set_code(grpc.StatusCode.INTERNAL)
+            _set_error_code(context, grpc.StatusCode.INTERNAL)
             context.set_details("internal Jarvis Chat error")
             return jarvis_pb2.ChatResponse()
         return jarvis_pb2.ChatResponse(
@@ -156,13 +161,13 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
             low_confidence=result["low_confidence"],
         )
 
-    @traced_request("gRPC.Generate", grpc=True)
+    @traced_request("gRPC.Generate")
     def Generate(self, request, context):
         try:
             with model_session():
                 text = _run_stateless_generate(request)
         except LLMError as error:
-            context.set_code(_llm_grpc_status(error))
+            _set_error_code(context, _llm_grpc_status(error))
             context.set_details(str(error))
             return jarvis_pb2.GenerateResponse()
         except Exception as error:
@@ -176,18 +181,18 @@ class JarvisServicer(jarvis_pb2_grpc.JarvisServiceServicer):
                     ("位置", _error_location(error)),
                 ),
             )
-            context.set_code(grpc.StatusCode.INTERNAL)
+            _set_error_code(context, grpc.StatusCode.INTERNAL)
             context.set_details("internal Jarvis Generate error")
             return jarvis_pb2.GenerateResponse()
         return jarvis_pb2.GenerateResponse(text=text)
 
-    @traced_request("gRPC.Ingest", grpc=True)
+    @traced_request("gRPC.Ingest")
     def Ingest(self, request, context):
         try:
             know_mem.store_knowledge(request.content, request.source_url, request.user_id)
             return jarvis_pb2.IngestResponse(success=True)
         except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
+            _set_error_code(context, grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             return jarvis_pb2.IngestResponse()
 

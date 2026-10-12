@@ -22,6 +22,12 @@ def node_feedback(**fields) -> None:
         feedback.update(fields)
 
 
+def request_feedback(**fields) -> None:
+    feedback = _REQUEST_FEEDBACK.get()
+    if feedback is not None:
+        feedback.update(fields)
+
+
 @contextmanager
 def action_trace(action: str, **fields):
     """Allow callers to report counts and outcomes after the action executes."""
@@ -46,7 +52,7 @@ def action_trace(action: str, **fields):
         raise
     else:
         status = feedback.pop("状态", "完成")
-        level = logging.WARNING if status in {"降级", "失败"} else logging.INFO
+        level = {"降级": logging.WARNING, "失败": logging.ERROR}.get(status, logging.INFO)
         logger.log(
             level, "%s", format_log_tags(
                 ("动作", action), ("状态", status),
@@ -73,18 +79,12 @@ def request_trace(method: str):
         REQUEST_ID.reset(token)
 
 
-def traced_request(method: str, *, grpc: bool = False):
+def traced_request(method: str):
     def decorate(function):
         @wraps(function)
         def run(*args, **kwargs):
             with request_trace(method) as feedback:
                 result = function(*args, **kwargs)
-                if grpc:
-                    context = args[2] if len(args) > 2 else kwargs["context"]
-                    code = getattr(context, "code", None)
-                    code = code() if callable(code) else code
-                    if code is not None and getattr(code, "name", None) != "OK":
-                        feedback.update(状态="失败", 状态码=getattr(code, "name", "error"))
                 answer = getattr(result, "answer", getattr(result, "text", None))
                 if answer is not None:
                     feedback["回答字符数"] = len(answer)
