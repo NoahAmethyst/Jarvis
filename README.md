@@ -35,7 +35,7 @@ HTTP :8080 / gRPC :9090
        ↓
   reflect            ← 自评分，score < 0.7 则循环回 plan（最多 3 次）
        ↓
-  memory_write       ← 写对话历史；工具内容 > 200 字自动入 Qdrant
+  memory_write       ← 写对话历史；网页证据经审核、摘录和去重后写入 Qdrant
          │
     ┌────┴────┐
   Qdrant  PostgreSQL
@@ -157,11 +157,18 @@ HTTP `/chat`、`/ingest` 和 gRPC `Chat`、`Generate`、`Ingest` 的每次调用
 | `plan_and_call` / 调用LLM | Profile、实际供应商/模型、尝试次数、消息数、回复字符数、工具调用数 |
 | `tool_node` / 网络工具 | 工具名称、结果字符数、搜索结果条数、跳过/不可用原因 |
 | `reflect` | 每轮分数、阈值、通过/未通过、重试或最终低置信度 |
-| `memory_write` | 工具结果长度检查、向量生成、知识写入数、历史写入数、跳过数或部分写入降级 |
+| `memory_write` | `【动作:知识来源筛选】`、`【动作:知识审核】`、`【动作:知识去重】`、向量生成、知识与历史的写入/跳过数 |
 
-当前“知识校验”指 `KNOWLEDGE_MIN_LENGTH` 长度门槛检查：工具结果长度严格超过
-阈值才自动入库。它不验证事实正确性，也不是独立的 LLM 知识核验。手动 Ingest
-直接入库；gRPC Generate 不执行回答评分和持久化，关闭 RAG/工具时会记录跳过原因。
+自动入库只接受成功的 `web_search`、`web_scrape` 结果。搜索按结果网址拆分，抓取使用
+最终响应网址。每轮最多提交 8 个来源给 `reflection` Profile 审核，判断相关性、来源
+可信度、信息质量及同批重复。只保存可在该来源原文中找到的连续摘录，最多 1,200 字符；
+不会保存整个搜索包。审核不等于事实核验，模型失败或返回无法解析时，本轮跳过自动入库，
+已生成的回答和对话历史不受影响。日志记录原因类别和数量，不输出审核原文或网址。
+
+去重按用户隔离，对网址去掉片段和常见跟踪参数，并比对原文及摘录指纹。同一网址的自动入库
+条目不覆盖；已隔离的同源或相同内容（包括可从旧搜索包识别的条目）也不会重新自动入库。
+手动 Ingest 仍不经过网页审核，但也不能重新激活已隔离来源或内容。完全相同的请求只会保留原条目。
+写入依赖 Qdrant 1.17+ 的原子 `insert_only`，旧版本拒绝写入。gRPC Generate 不执行回答评分和持久化。
 
 简单问候跳过历史加载和知识检索。带实际问题的请求根据相似度召回知识，受单条和
 总字符预算限制。QQ 的固定输出格式附注仅保留在模型回答的输入中，不参与知识检索。
@@ -388,7 +395,7 @@ Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消�
 | `POSTGRES_DSN` | `postgresql://postgres:postgres@localhost:5432/jarvis` | PostgreSQL 连接串 |
 | `REFLECTION_SCORE_THRESHOLD` | `0.7` | 低于此分数触发重试 |
 | `REFLECTION_MAX_RETRIES` | `3` | 最大重试次数 |
-| `KNOWLEDGE_MIN_LENGTH` | `200` | 工具返回内容超过此长度自动入库 |
+| `KNOWLEDGE_MIN_LENGTH` | `40` | 网页来源送审前的最少字母/数字字符数（包含汉字），取值 1–2,400。已有 Kubernetes 配置可能保持较高值 |
 | `RAG_MIN_SCORE` | `0.70` | Qdrant 余弦相似度最低门槛，取值 0 到 1，按实际检索效果调整 |
 | `RAG_MAX_DOCUMENT_CHARS` | `1200` | 单条知识注入的字符上限 |
 | `RAG_MAX_CONTEXT_CHARS` | `3000` | 全部知识注入的字符上限，包含分隔符 |

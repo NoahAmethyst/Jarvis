@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
         "Input: search query string."
     ),
     required_env_vars=("TAVILY_API_KEY",),
+    response_format="content_and_artifact",
 )
-def web_search(query: str) -> str:
+def _web_search_tool(query: str) -> tuple[str, dict]:
     if not TAVILY_API_KEY:
         raise ToolUnavailableError("web_search", "configuration")
     try:
@@ -45,6 +46,13 @@ def web_search(query: str) -> str:
     logger.info("%s", format_log_tags(
         ("动作", "网络搜索结果"), ("工具", "web_search"), ("结果条数", len(results)),
     ))
-    return "\n\n".join(
-        f"Title: {r['title']}\nURL: {r['url']}\n{r['content']}" for r in results
-    )
+    sources = [
+        {"title": result["title"], "url": result["url"], "text": result["content"]}
+        for result in results
+    ]
+    content = "\n\n".join(f"Title: {r['title']}\nURL: {r['url']}\n{r['text']}" for r in sources)
+    return content, {"sources": sources}
+
+
+def web_search(query: str) -> str:
+    return _web_search_tool(query)[0]

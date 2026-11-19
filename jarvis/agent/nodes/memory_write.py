@@ -1,11 +1,11 @@
 import logging
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage
+from jarvis.agent.query_context import retrieval_query
 from jarvis.agent.state import AgentState
-from jarvis.config import KNOWLEDGE_MIN_LENGTH
 from jarvis.logging_config import format_log_tags
 from jarvis.execution_logging import traced_node, action_trace, node_feedback
 from jarvis.memory import conversation as conv_mem
-from jarvis.memory import knowledge as know_mem
+from jarvis.memory.web_knowledge import IngestionStats, ingest_web_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 def memory_write(state: AgentState) -> dict:
     user_id = state["user_id"]
     saved = 0
-    stored = 0
-    skipped = 0
+    stats = IngestionStats()
 
     try:
         with action_trace("对话落库", 组件="PostgreSQL") as feedback:
@@ -41,31 +40,21 @@ def memory_write(state: AgentState) -> dict:
         )
 
     try:
-        for msg in state["messages"]:
-            if isinstance(msg, ToolMessage):
-                content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                with action_trace("知识长度校验", 工具=msg.name or "unknown") as feedback:
-                    eligible = len(content) > KNOWLEDGE_MIN_LENGTH
-                    feedback.update(
-                        字符数=len(content), 阈值=KNOWLEDGE_MIN_LENGTH,
-                        结果="通过" if eligible else "跳过",
-                    )
-                if eligible:
-                    know_mem.store_knowledge(content, f"tool:{msg.name}", user_id)
-                    stored += 1
-                else:
-                    skipped += 1
+        ingest_web_knowledge(
+            state["messages"], retrieval_query(state.get("query", ""), user_id),
+            user_id, state.get("reflect_llm_override"), stats,
+        )
     except Exception as error:
         node_feedback(状态="降级")
         logger.warning(
             "%s Could not store tool results as knowledge",
             format_log_tags(
                 ("节点", "memory_write"),
-                ("组件", "Qdrant"),
+                ("组件", "知识入库"),
                 ("状态", "降级"),
                 ("错误", type(error).__name__),
             ),
         )
 
-    node_feedback(历史落库数=saved, 知识落库数=stored, 知识跳过数=skipped)
+    node_feedback(历史落库数=saved, 知识落库数=stats.stored, 知识跳过数=stats.skipped)
     return {}

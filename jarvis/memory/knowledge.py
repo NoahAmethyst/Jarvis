@@ -1,8 +1,17 @@
 import hashlib
 import logging
+import re
+import unicodedata
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
+from uuid import uuid4
+
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue,
+    MatchAny, UpdateMode, UpdateStatus,
+)
 from langchain_openai import OpenAIEmbeddings
 from jarvis.config import (
     QDRANT_URL, EMBED_MODEL, VECTOR_SIZE,
@@ -16,6 +25,9 @@ from jarvis.execution_logging import action_trace
 logger = logging.getLogger(__name__)
 COLLECTION_NAME = "jarvis_knowledge"
 _CONTEXT_SEPARATOR = "\n\n---\n\n"
+_LEGACY_SEARCH_HEADER = re.compile(r"(?:\A|\n\n)Title: [^\r\n]*\r?\nURL: ([^\s]+)[ \t]*\r?\n")
+_TRACKING_PARAMS = {"fbclid", "gclid", "msclkid"}
+_CREDENTIAL_PARAMS = {"api_key", "apikey", "key", "access_token", "token", "signature", "sig", "password", "auth", "authorization"}
 
 
 def _parse_embed_model(model_spec: str) -> tuple[str, str, str]:
@@ -79,29 +91,176 @@ def init_collection():
     )
 
 
-def store_knowledge(text: str, source_url: str, user_id: str):
+def canonical_web_url(url: str) -> str:
+    url = url.strip()
+    if not url or len(url) > 2048 or any(c.isspace() for c in url) or "\\" in url:
+        return ""
+    try:
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username is not None:
+            return ""
+        host = parts.hostname.lower()
+        port = parts.port
+    except ValueError:
+        return ""
+    netloc = f"[{host}]" if ":" in host else host
+    if port is not None and (parts.scheme, port) not in {("http", 80), ("https", 443)}:
+        netloc += f":{port}"
+    query = []
+    for param in parts.query.split("&"):
+        name = unquote_plus(param.partition("=")[0]).casefold()
+        if name in _CREDENTIAL_PARAMS or name.startswith(("x-amz-", "x-goog-")):
+            return ""
+        if param and name not in _TRACKING_PARAMS and not name.startswith("utm_"):
+            query.append(param)
+    return urlunsplit((parts.scheme, netloc, parts.path or "/", "&".join(query), ""))
+
+
+def _normalize_text(text: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+
+
+def content_digest(text: str) -> str:
+    return hashlib.sha256(_normalize_text(text).encode()).hexdigest()
+
+
+def _legacy_search_sources(text: str):
+    headers = list(_LEGACY_SEARCH_HEADER.finditer(text))
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+        yield canonical_web_url(header[1]), text[header.end():end].strip()
+
+
+@dataclass
+class ExistingWebKnowledge:
+    urls: set[str] = field(default_factory=set)
+    hashes: set[str] = field(default_factory=set)
+    quarantined_texts: set[str] = field(default_factory=set)
+
+    def contains_quarantined_excerpt(self, excerpt: str) -> bool:
+        normalized = _normalize_text(excerpt)
+        return bool(normalized) and any(
+            normalized in text or (len(text) >= 24 and text in normalized)
+            for text in self.quarantined_texts
+        )
+
+
+def existing_web_knowledge(user_id: str, urls: set[str], digests: set[str]) -> ExistingWebKnowledge:
+    """Look up matching identities and this user's quarantined entries."""
+    conditions = [FieldCondition(key="rag_quarantined", match=MatchValue(value=True))]
+    if urls:
+        conditions.extend(FieldCondition(key=key, match=MatchAny(any=sorted(urls)))
+                          for key in ("source_url", "canonical_url"))
+    if digests:
+        conditions.extend(FieldCondition(key=key, match=MatchAny(any=sorted(digests)))
+                          for key in ("content_hash", "raw_hash"))
+    existing = ExistingWebKnowledge()
+    client = _get_client()
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))],
+                should=conditions,
+            ),
+            offset=offset, limit=64, with_vectors=False,
+            with_payload=["source_url", "content_hash", "raw_hash", "rag_quarantined", "text"],
+        )
+        for point in points:
+            payload = point.payload or {}
+            source_url = payload.get("source_url")
+            if isinstance(source_url, str):
+                canonical_url = canonical_web_url(source_url)
+                if canonical_url:
+                    existing.urls.add(canonical_url)
+            existing.hashes.update(payload[key] for key in ("raw_hash", "content_hash")
+                                   if isinstance(payload.get(key), str))
+            raw = payload.get("text")
+            if not isinstance(raw, str) or not raw:
+                continue
+            existing.hashes.add(content_digest(raw))
+            if payload.get("rag_quarantined") is not True:
+                continue
+            existing.quarantined_texts.add(_normalize_text(raw))
+            if source_url == "tool:web_search":
+                for legacy_url, legacy_text in _legacy_search_sources(raw):
+                    if legacy_url:
+                        existing.urls.add(legacy_url)
+                    existing.hashes.add(content_digest(legacy_text))
+                    if legacy_text:
+                        existing.quarantined_texts.add(_normalize_text(legacy_text))
+        if offset is None:
+            return existing
+
+
+def _point_id(key: str) -> int:
+    return int(hashlib.sha256(key.encode()).hexdigest(), 16) % (2**63)
+
+
+def _insert_knowledge(text: str, payload: dict, point_id: int) -> bool:
+    client = _get_client()
+    if client.retrieve(collection_name=COLLECTION_NAME, ids=[point_id], with_payload=False):
+        return False
+    # Older servers could ignore the unknown update_mode field and overwrite a point.
+    version = re.match(r"^(\d+)\.(\d+)\.", client.info().version)
+    if not version or tuple(map(int, version.groups())) < (1, 17):
+        raise RuntimeError("Knowledge writes require Qdrant 1.17 or newer")
     with action_trace("知识向量生成", 模型=EMBED_MODEL, 字符数=len(text)) as feedback:
         embeddings = _get_embeddings()
         vector = embeddings.embed_query(text)
         feedback["向量维度"] = len(vector)
-    client = _get_client()
-    key = f"{user_id}:{source_url}:{text}"
-    point_id = int(hashlib.sha256(key.encode()).hexdigest(), 16) % (2**63)
     with action_trace("知识落库", 组件="Qdrant", 集合=COLLECTION_NAME) as feedback:
-        client.upsert(
+        write_id = uuid4().hex
+        result = client.upsert(
             collection_name=COLLECTION_NAME,
+            wait=True,
+            update_mode=UpdateMode.INSERT_ONLY,
             points=[PointStruct(
                 id=point_id,
                 vector=vector,
                 payload={
                     "text": text,
-                    "source_url": source_url,
-                    "user_id": user_id,
+                    "content_hash": content_digest(text),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "write_id": write_id,
+                    **payload,
                 },
             )],
         )
-        feedback["写入数"] = 1
+        if result.status != UpdateStatus.COMPLETED:
+            raise RuntimeError("Qdrant did not confirm knowledge insert")
+        points = client.retrieve(collection_name=COLLECTION_NAME, ids=[point_id], with_payload=["write_id"])
+        if not points:
+            raise RuntimeError("Qdrant returned no point after insert")
+        inserted = (points[0].payload or {}).get("write_id") == write_id
+        feedback["写入数"] = int(inserted)
+        return inserted
+
+
+def store_knowledge(text: str, source_url: str, user_id: str) -> bool:
+    """Explicit ingestion preserves the existing point identity and audit payload."""
+    canonical_url = canonical_web_url(source_url)
+    quarantined = existing_web_knowledge(user_id, set(), set())
+    if (canonical_url in quarantined.urls or content_digest(text) in quarantined.hashes
+            or quarantined.contains_quarantined_excerpt(text)):
+        with action_trace("知识落库", 组件="Qdrant", 集合=COLLECTION_NAME) as feedback:
+            feedback.update(状态="跳过", 原因="已隔离", 写入数=0)
+        return False
+    return _insert_knowledge(
+        text,
+        {"source_url": source_url, "user_id": user_id, "canonical_url": canonical_url},
+        _point_id(f"{user_id}:{source_url}:{text}"),
+    )
+
+
+def store_web_knowledge(text: str, source_url: str, user_id: str, raw_hash: str) -> bool:
+    """One automatic record per user and canonical source, immutable on re-ingest."""
+    return _insert_knowledge(
+        text,
+        {"source_url": source_url, "user_id": user_id, "raw_hash": raw_hash},
+        _point_id(f"web:{len(user_id)}:{user_id}:{source_url}"),
+    )
 
 
 def retrieve_knowledge(query: str, user_id: str, top_k: int = 5) -> str:

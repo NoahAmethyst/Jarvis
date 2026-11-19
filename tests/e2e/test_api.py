@@ -23,7 +23,7 @@ def client():
          patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]), \
          patch("jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""), \
          patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"), \
-         patch("jarvis.agent.nodes.memory_write.know_mem.store_knowledge"):
+         patch("jarvis.memory.knowledge.store_web_knowledge"):
         from jarvis.api.http.routes import app
         yield TestClient(app)
 

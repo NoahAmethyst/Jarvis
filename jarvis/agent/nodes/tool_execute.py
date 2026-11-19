@@ -35,6 +35,7 @@ def _unavailable_tool_message(
         content=TOOL_UNAVAILABLE_MESSAGE,
         tool_call_id=tool_call_id,
         name=tool_name,
+        status="error",
     )
 
 
@@ -50,11 +51,14 @@ def _execute_tool_call(tool_call: dict, unavailable: set[str]) -> ToolMessage:
             feedback.update(状态="跳过", 类别="configuration")
             return _unavailable_tool_message(tool_name, tool_call["id"], "configuration")
         try:
-            result = registration.tool.invoke(tool_call["args"])
+            result = registration.tool.invoke({**tool_call, "type": "tool_call"})
         except ToolUnavailableError as error:
             unavailable.add(tool_name)
             feedback.update(状态="降级", 类别=error.category)
             return _unavailable_tool_message(tool_name, tool_call["id"], error.category)
+        if isinstance(result, ToolMessage):
+            feedback["结果字符数"] = len(str(result.content))
+            return result
         feedback["结果字符数"] = len(str(result))
         return ToolMessage(
             content=result if isinstance(result, (str, list)) else str(result),

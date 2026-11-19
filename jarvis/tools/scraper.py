@@ -7,8 +7,12 @@ from jarvis.tools.errors import (
 from jarvis.tools.registry import register_tool
 
 
-@register_tool(name="web_scrape", description="Fetch and extract text content from a URL. Input: full URL string.")
-def web_scrape(url: str) -> str:
+@register_tool(
+    name="web_scrape",
+    description="Fetch and extract text content from a URL. Input: full URL string.",
+    response_format="content_and_artifact",
+)
+def _web_scrape_tool(url: str) -> tuple[str, dict]:
     try:
         resp = requests.get(
             url,
@@ -28,5 +32,9 @@ def web_scrape(url: str) -> str:
     soup = BeautifulSoup(resp.text, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
-    text = soup.get_text(separator="\n", strip=True)
-    return text[:5000]
+    text = soup.get_text(separator="\n", strip=True)[:5000]
+    return text, {"sources": [{"title": "", "url": resp.url, "text": text}]}
+
+
+def web_scrape(url: str) -> str:
+    return _web_scrape_tool(url)[0]

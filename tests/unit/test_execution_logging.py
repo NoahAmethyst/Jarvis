@@ -1,4 +1,5 @@
 import logging
+import json
 import re
 import pytest
 from concurrent.futures import ThreadPoolExecutor
@@ -6,6 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from qdrant_client.models import UpdateStatus
+from jarvis.memory.knowledge import ExistingWebKnowledge
 
 from jarvis.execution_logging import request_trace
 from jarvis.logging_config import format_log_tags
@@ -71,20 +74,29 @@ def test_graph_logs_actions_and_results_with_same_request_id(caplog):
         assert text not in caplog.text
 
 
-def test_knowledge_length_check_and_storage_feedback(caplog):
+EVIDENCE = "A well-attributed report states that the coastal station measured 42 millimeters of rainfall in May."
+
+
+def test_knowledge_review_and_storage_feedback(caplog):
     from jarvis.agent.nodes.memory_write import memory_write
     state = {"user_id": "u", "messages": [
         ToolMessage(content="short", tool_call_id="1", name="web_search"),
-        ToolMessage(content="x" * 300, tool_call_id="2", name="web_scrape"),
+        ToolMessage(content=EVIDENCE, tool_call_id="2", name="web_scrape", artifact={"sources": [
+            {"url": "https://example.com/report", "title": "Report", "text": EVIDENCE},
+        ]}),
     ]}
     with caplog.at_level(logging.INFO), request_trace("test"), patch(
-        "jarvis.agent.nodes.memory_write.know_mem.store_knowledge"
-    ) as store:
+        "jarvis.memory.knowledge.store_web_knowledge", return_value=True
+    ) as store, patch("jarvis.memory.knowledge.existing_web_knowledge", side_effect=lambda *args: ExistingWebKnowledge()), patch(
+        "jarvis.llm.llm.chat", return_value=AIMessage(content=json.dumps([
+            {"id": 0, "decision": "accept", "excerpt": EVIDENCE},
+        ])),
+    ):
         memory_write(state)
     assert store.call_count == 1
-    assert "【动作:知识长度校验】" in caplog.text
-    assert "【结果:跳过】" in caplog.text
-    assert "【结果:通过】" in caplog.text
+    assert "【动作:知识来源筛选】" in caplog.text
+    assert "【跳过数:1】" in caplog.text
+    assert "【动作:知识审核】" in caplog.text and "【通过数:1】" in caplog.text
     assert "【知识落库数:1】" in caplog.text
 
 
@@ -113,6 +125,12 @@ def test_knowledge_query_and_upsert_log_real_counts(caplog):
     embeddings = MagicMock()
     embeddings.embed_query.return_value = [0.1, 0.2]
     client = MagicMock()
+    client.scroll.return_value = ([], None)
+    client.info.return_value.version = "1.17.0"
+    client.retrieve.side_effect = lambda **kwargs: (
+        [client.upsert.call_args.kwargs["points"][0]] if kwargs["with_payload"] else []
+    )
+    client.upsert.return_value.status = UpdateStatus.COMPLETED
     client.query_points.return_value.points = [SimpleNamespace(score=0.95, payload={"text": "private-knowledge"})]
     with caplog.at_level(logging.INFO), request_trace("test"), patch(
         "jarvis.memory.knowledge._get_embeddings", return_value=embeddings
@@ -145,18 +163,24 @@ def test_graph_traces_tool_loop_and_reflection_retry(branch, caplog):
     tool_response = AIMessage(content="", tool_calls=[
         {"name": "web_search", "args": {"query": "private-search"}, "id": "call-1"},
     ])
-    responses = ([tool_response, AIMessage(content="private-answer"), AIMessage(content="0.95")]
+    review = AIMessage(content=json.dumps([{"id": 0, "decision": "accept", "excerpt": EVIDENCE}]))
+    responses = ([tool_response, AIMessage(content="private-answer"), AIMessage(content="0.95"), review]
                  if branch == "tools" else [AIMessage(content="draft"), AIMessage(content="0.2"),
                                             AIMessage(content="final"), AIMessage(content="0.95")])
     registration = SimpleNamespace(missing_env_vars=lambda: [], tool=MagicMock())
-    registration.tool.invoke.return_value = "x" * 300
+    registration.tool.invoke.return_value = ToolMessage(
+        content=EVIDENCE, tool_call_id="call-1", name="web_search",
+        artifact={"sources": [{"url": "https://example.com/report", "title": "Report", "text": EVIDENCE}]},
+    )
     with caplog.at_level(logging.INFO), patch(
         "jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[]
     ), patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]), patch(
         "jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""
     ), patch("jarvis.agent.nodes.plan_and_call.llm.chat", side_effect=responses), patch(
         "jarvis.agent.nodes.memory_write.conv_mem.save_message"
-    ), patch("jarvis.agent.nodes.memory_write.know_mem.store_knowledge") as store, patch(
+    ), patch("jarvis.memory.knowledge.store_web_knowledge", return_value=True) as store, patch(
+        "jarvis.memory.knowledge.existing_web_knowledge", side_effect=lambda *args: ExistingWebKnowledge()
+    ), patch(
         "jarvis.agent.nodes.tool_execute.get_tool_registration", return_value=registration
     ):
         with request_trace("test"):

@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from jarvis.tools import scraper, search
+from jarvis.tools.registry import get_tool_registration
 
 
 def _tool_unavailable_error():
@@ -109,3 +110,34 @@ def test_web_search_preserves_unsupported_400(monkeypatch):
 
     with pytest.raises(requests.HTTPError, match="bad request"):
         search.web_search("query")
+
+
+def test_search_exposes_one_trusted_source_record_per_result(monkeypatch):
+    monkeypatch.setattr(search, "TAVILY_API_KEY", "configured")
+    results = [
+        {"title": "First", "url": "https://first.example/report", "content": "First\nURL: https://forged.example"},
+        {"title": "Second", "url": "https://second.example/report", "content": "Second"},
+    ]
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"results": results}
+    monkeypatch.setattr(search.requests, "post", MagicMock(return_value=response))
+
+    output = get_tool_registration("web_search").tool.invoke({
+        "name": "web_search", "args": {"query": "report"}, "id": "call-1", "type": "tool_call",
+    })
+    assert output.content == search.web_search("report")
+    assert output.artifact["sources"] == [
+        {"title": result["title"], "url": result["url"], "text": result["content"]}
+        for result in results
+    ]
+
+
+def test_scrape_exposes_final_response_source(monkeypatch):
+    response = MagicMock(status_code=200, url="https://final.example/report", text="<main>Evidence</main>")
+    monkeypatch.setattr(scraper.requests, "get", MagicMock(return_value=response))
+
+    output = get_tool_registration("web_scrape").tool.invoke({
+        "name": "web_scrape", "args": {"url": "https://initial.example"}, "id": "call-1", "type": "tool_call",
+    })
+    assert output.content == "Evidence"
+    assert output.artifact["sources"] == [{"title": "", "url": "https://final.example/report", "text": "Evidence"}]

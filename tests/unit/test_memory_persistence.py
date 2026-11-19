@@ -30,7 +30,7 @@ def test_memory_write_keeps_tool_transcript_out_of_conversation_storage():
     with patch(
         "jarvis.agent.nodes.memory_write.conv_mem.save_message"
     ) as save_message, patch(
-        "jarvis.agent.nodes.memory_write.know_mem.store_knowledge"
+        "jarvis.memory.knowledge.store_web_knowledge"
     ) as store_knowledge:
         memory_write(state)
 
@@ -38,11 +38,7 @@ def test_memory_write_keeps_tool_transcript_out_of_conversation_storage():
         (("u1", "human", "question"),),
         (("u1", "ai", "final answer"),),
     ]
-    store_knowledge.assert_called_once_with(
-        tool_result,
-        "tool:web_search",
-        "u1",
-    )
+    store_knowledge.assert_not_called()
 
 
 def test_short_tool_result_is_not_persisted_as_knowledge():
@@ -58,7 +54,7 @@ def test_short_tool_result_is_not_persisted_as_knowledge():
     with patch(
         "jarvis.agent.nodes.memory_write.conv_mem.save_message"
     ), patch(
-        "jarvis.agent.nodes.memory_write.know_mem.store_knowledge"
+        "jarvis.memory.knowledge.store_web_knowledge"
     ) as store_knowledge:
         memory_write(state)
 

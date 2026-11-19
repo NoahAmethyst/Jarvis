@@ -1,6 +1,7 @@
 import pytest
 from types import SimpleNamespace
 from qdrant_client import QdrantClient
+from qdrant_client.models import UpdateStatus
 from unittest.mock import patch, MagicMock
 
 
@@ -10,6 +11,12 @@ def test_store_and_retrieve_knowledge():
 
     mock_client = MagicMock(spec=QdrantClient)
     mock_client.get_collections.return_value.collections = []
+    mock_client.scroll.return_value = ([], None)
+    mock_client.info.return_value.version = "1.17.0"
+    mock_client.retrieve.side_effect = lambda **kwargs: (
+        [mock_client.upsert.call_args.kwargs["points"][0]] if kwargs["with_payload"] else []
+    )
+    mock_client.upsert.return_value.status = UpdateStatus.COMPLETED
     mock_result = MagicMock()
     mock_result.score = 0.9
     mock_result.payload = {"text": "Paris is the capital of France."}
@@ -25,6 +32,55 @@ def test_store_and_retrieve_knowledge():
     assert "Paris" in result
     mock_client.upsert.assert_called_once()
     mock_client.query_points.assert_called_once()
+
+
+def test_reingest_keeps_quarantined_point_even_if_created_between_read_and_write(monkeypatch):
+    from jarvis.memory import knowledge
+
+    client = QdrantClient(":memory:")
+    monkeypatch.setattr(knowledge, "_get_client", lambda: client)
+    monkeypatch.setattr(knowledge, "VECTOR_SIZE", 2)
+    embeddings = MagicMock()
+    embeddings.embed_query.return_value = [0.1, 0.2]
+    monkeypatch.setattr(knowledge, "_get_embeddings", lambda: embeddings)
+    knowledge.init_collection()
+    real_upsert = client.upsert
+
+    def quarantine_between_read_and_write(**kwargs):
+        point = kwargs["points"][0].model_copy(deep=True)
+        point.payload.update(rag_quarantined=True, timestamp="original", audit_reason="reviewed")
+        point.payload.pop("write_id")
+        real_upsert(knowledge.COLLECTION_NAME, [point])
+        return real_upsert(**kwargs)
+
+    with patch.object(client, "upsert", side_effect=quarantine_between_read_and_write):
+        assert knowledge.store_knowledge("raw knowledge", "tool:web_search", "u1") is False
+    assert knowledge.store_knowledge("raw knowledge", "tool:web_search", "u1") is False
+
+    points, _ = client.scroll(knowledge.COLLECTION_NAME)
+    assert len(points) == 1
+    assert points[0].payload["rag_quarantined"] is True
+    assert points[0].payload["timestamp"] == "original"
+    assert points[0].payload["audit_reason"] == "reviewed"
+    embeddings.embed_query.assert_called_once_with("raw knowledge")
+
+
+def test_older_qdrant_does_not_risk_overwriting_quarantine(monkeypatch):
+    from jarvis.memory import knowledge
+
+    client = MagicMock(spec=QdrantClient)
+    client.scroll.return_value = ([], None)
+    client.retrieve.return_value = []
+    client.info.return_value.version = "1.16.0"
+    embeddings = MagicMock()
+    monkeypatch.setattr(knowledge, "_get_client", lambda: client)
+    monkeypatch.setattr(knowledge, "_get_embeddings", lambda: embeddings)
+
+    with pytest.raises(RuntimeError, match="Qdrant 1.17 or newer"):
+        knowledge.store_knowledge("text", "https://example.com", "u1")
+
+    client.upsert.assert_not_called()
+    embeddings.embed_query.assert_not_called()
 
 
 def test_retrieval_filters_irrelevant_and_quarantined_points_and_caps_context(monkeypatch):

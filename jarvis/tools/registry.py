@@ -1,6 +1,7 @@
 import os
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 from langchain_core.tools import StructuredTool
 
@@ -27,12 +28,15 @@ def register_tool(
     name: str,
     description: str,
     required_env_vars: tuple[str, ...] = (),
+    *,
+    response_format: Literal["content", "content_and_artifact"] = "content",
 ):
     def decorator(func: Callable) -> Callable:
         tool = StructuredTool.from_function(
             func=func,
             name=name,
             description=description,
+            response_format=response_format,
         )
         _REGISTRY[name] = ToolRegistration(
             tool=tool,
