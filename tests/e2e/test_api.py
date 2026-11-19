@@ -51,6 +51,48 @@ def test_chat_returns_answer(client, caplog):
     assert "Paris is the capital of France." not in caplog.text
 
 
+QQ_OUTPUT_POLICY = """QQ输出约束：
+返回适合直接发送到QQ的普通文本。
+可以使用emoji和普通中文标点、普通符号突出标题和重点。
+不允许使用Markdown格式，不要使用Markdown标题、项目符号、加粗、斜体、删除线、代码块、表格、引用或Markdown链接。
+可以用简短自然段组织内容。"""
+
+
+@pytest.mark.parametrize(
+    ("user_id", "query", "expected_search"),
+    [
+        ("user", "你好？", None),
+        ("qq:private:100", "你好？\n\n" + QQ_OUTPUT_POLICY, None),
+        ("qq:group:1:2", "你好，请帮我找项目文档\n\n" + QQ_OUTPUT_POLICY, "你好，请帮我找项目文档"),
+        ("user", "你好这个词怎么翻译？", "你好这个词怎么翻译？"),
+    ],
+)
+def test_chat_limits_context_for_standalone_greetings(client, caplog, user_id, query, expected_search):
+    caplog.set_level(logging.INFO)
+    with patch("jarvis.agent.nodes.memory_load.conv_mem.load_history", return_value=[
+        HumanMessage(content="old history"),
+    ]) as history, patch(
+        "jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value="related knowledge",
+    ) as search, patch(
+        "jarvis.agent.nodes.plan_and_call.llm.chat",
+        side_effect=[AIMessage(content="你好！"), AIMessage(content="0.95")],
+    ) as model:
+        response = client.post("/chat", json={"message": query, "user_id": user_id})
+
+    assert response.status_code == 200
+    messages = model.call_args_list[0].kwargs["messages"]
+    assert messages[-1].content == query
+    if expected_search is None:
+        history.assert_not_called()
+        search.assert_not_called()
+        assert len(messages) == 2
+        assert "【原因:简单问候】" in caplog.text
+    else:
+        history.assert_called_once_with(user_id)
+        search.assert_called_once_with(expected_search, user_id)
+        assert "related knowledge" in messages[0].content
+
+
 def test_liveness_is_available(client):
     response = client.get("/health/live")
 

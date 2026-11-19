@@ -181,7 +181,11 @@ Thresholds come from:
     then truncate it to 63 bits. Different field tuples can collide at
     delimiters (or by hash truncation), and Qdrant upsert will overwrite that
     Point, so the ID is not a cross-user data-integrity boundary.
-  - Retrieval filters by `user_id` and joins payload texts with `---`.
+  - Retrieval filters by `user_id`, excludes `rag_quarantined: true`, and applies
+    a configurable cosine floor (default 0.70). It joins excerpts within a
+    per-document and total character budget (defaults 1,200 and 3,000).
+  - Standalone greetings skip RAG and Chat history loading. The known QQ client
+    output-format suffix is removed from the retrieval query only.
   - Long tool-result text may remain untyped RAG knowledge; it is never
     reconstructed as provider tool messages.
 

@@ -1,4 +1,5 @@
 import logging
+from jarvis.agent.query_context import is_standalone_greeting, retrieval_query
 from jarvis.agent.state import AgentState
 from jarvis.memory import conversation as conv_mem
 from jarvis.logging_config import format_log_tags
@@ -9,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 @traced_node("memory_load")
 def memory_load(state: AgentState) -> dict:
+    if is_standalone_greeting(retrieval_query(state.get("query", ""), state["user_id"])):
+        node_feedback(状态="跳过", 原因="简单问候")
+        return {"history": []}
     try:
         history = conv_mem.load_history(state["user_id"])
         return {"history": history}

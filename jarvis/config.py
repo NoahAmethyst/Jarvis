@@ -1,3 +1,4 @@
+import math
 import os
 from dotenv import load_dotenv
 
@@ -23,6 +24,13 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 REFLECTION_SCORE_THRESHOLD = float(os.getenv("REFLECTION_SCORE_THRESHOLD", "0.7"))
 REFLECTION_MAX_RETRIES = int(os.getenv("REFLECTION_MAX_RETRIES", "3"))
 KNOWLEDGE_MIN_LENGTH = int(os.getenv("KNOWLEDGE_MIN_LENGTH", "200"))
+RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.70"))
+RAG_MAX_DOCUMENT_CHARS = int(os.getenv("RAG_MAX_DOCUMENT_CHARS", "1200"))
+RAG_MAX_CONTEXT_CHARS = int(os.getenv("RAG_MAX_CONTEXT_CHARS", "3000"))
+if not math.isfinite(RAG_MIN_SCORE) or not 0 <= RAG_MIN_SCORE <= 1:
+    raise ValueError("RAG_MIN_SCORE must be between 0 and 1")
+if min(RAG_MAX_DOCUMENT_CHARS, RAG_MAX_CONTEXT_CHARS) < 1:
+    raise ValueError("RAG character limits must be positive")
 
 AGENTS_DIR = os.getenv("AGENTS_DIR", ".agents/skills")
 AGENT_DISPATCH_THRESHOLD = float(os.getenv("AGENT_DISPATCH_THRESHOLD", "0.6"))

@@ -113,7 +113,7 @@ def test_knowledge_query_and_upsert_log_real_counts(caplog):
     embeddings = MagicMock()
     embeddings.embed_query.return_value = [0.1, 0.2]
     client = MagicMock()
-    client.query_points.return_value.points = [SimpleNamespace(payload={"text": "private-knowledge"})]
+    client.query_points.return_value.points = [SimpleNamespace(score=0.95, payload={"text": "private-knowledge"})]
     with caplog.at_level(logging.INFO), request_trace("test"), patch(
         "jarvis.memory.knowledge._get_embeddings", return_value=embeddings
     ), patch("jarvis.memory.knowledge._get_client", return_value=client):

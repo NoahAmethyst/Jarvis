@@ -153,7 +153,7 @@ HTTP `/chat`、`/ingest` 和 gRPC `Chat`、`Generate`、`Ingest` 的每次调用
 | 动作/节点 | 反馈 |
 |-----------|------|
 | `memory_load` / `agent_dispatch` | 历史条数、选中 Agent、评分或跳过/降级 |
-| `rag_retrieve` / 查询知识库 | Embedding 向量维度、TopK、命中数、知识字符数或失败 |
+| `rag_retrieve` / 查询知识库 | 问候跳过、Embedding 向量维度、TopK、最低相似度、命中数、实际注入条数与字符数 |
 | `plan_and_call` / 调用LLM | Profile、实际供应商/模型、尝试次数、消息数、回复字符数、工具调用数 |
 | `tool_node` / 网络工具 | 工具名称、结果字符数、搜索结果条数、跳过/不可用原因 |
 | `reflect` | 每轮分数、阈值、通过/未通过、重试或最终低置信度 |
@@ -162,6 +162,9 @@ HTTP `/chat`、`/ingest` 和 gRPC `Chat`、`Generate`、`Ingest` 的每次调用
 当前“知识校验”指 `KNOWLEDGE_MIN_LENGTH` 长度门槛检查：工具结果长度严格超过
 阈值才自动入库。它不验证事实正确性，也不是独立的 LLM 知识核验。手动 Ingest
 直接入库；gRPC Generate 不执行回答评分和持久化，关闭 RAG/工具时会记录跳过原因。
+
+简单问候跳过历史加载和知识检索。带实际问题的请求根据相似度召回知识，受单条和
+总字符预算限制。QQ 的固定输出格式附注仅保留在模型回答的输入中，不参与知识检索。
 
 以下是日志结构示例（省略时间与 logger，ID/耗时为示意值）：
 
@@ -386,6 +389,9 @@ Gateway 按完整 assistant/tool 消息组裁剪；DeepSeek 不额外设置消�
 | `REFLECTION_SCORE_THRESHOLD` | `0.7` | 低于此分数触发重试 |
 | `REFLECTION_MAX_RETRIES` | `3` | 最大重试次数 |
 | `KNOWLEDGE_MIN_LENGTH` | `200` | 工具返回内容超过此长度自动入库 |
+| `RAG_MIN_SCORE` | `0.70` | Qdrant 余弦相似度最低门槛，取值 0 到 1，按实际检索效果调整 |
+| `RAG_MAX_DOCUMENT_CHARS` | `1200` | 单条知识注入的字符上限 |
+| `RAG_MAX_CONTEXT_CHARS` | `3000` | 全部知识注入的字符上限，包含分隔符 |
 | `AGENTS_DIR` | `.agents/skills` | 自定义 Agent 定义文件目录 |
 | `AGENT_DISPATCH_THRESHOLD` | `0.6` | Agent 匹配评分阈值，低于此值不激活 |
 

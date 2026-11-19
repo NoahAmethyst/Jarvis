@@ -7,6 +7,7 @@ from langchain_openai import OpenAIEmbeddings
 from jarvis.config import (
     QDRANT_URL, EMBED_MODEL, VECTOR_SIZE,
     SILICONFLOW_API_KEY, SILICONFLOW_BASE_URL,
+    RAG_MIN_SCORE, RAG_MAX_DOCUMENT_CHARS, RAG_MAX_CONTEXT_CHARS,
 )
 from jarvis.llm.errors import LLMConfigurationError, LLMCredentialError
 from jarvis.logging_config import format_log_tags
@@ -14,6 +15,7 @@ from jarvis.execution_logging import action_trace
 
 logger = logging.getLogger(__name__)
 COLLECTION_NAME = "jarvis_knowledge"
+_CONTEXT_SEPARATOR = "\n\n---\n\n"
 
 
 def _parse_embed_model(model_spec: str) -> tuple[str, str, str]:
@@ -108,17 +110,36 @@ def retrieve_knowledge(query: str, user_id: str, top_k: int = 5) -> str:
         vector = embeddings.embed_query(query)
         feedback["向量维度"] = len(vector)
     client = _get_client()
-    with action_trace("查询知识库", 组件="Qdrant", TopK=top_k) as feedback:
+    with action_trace("查询知识库", 组件="Qdrant", TopK=top_k, 最低相似度=RAG_MIN_SCORE) as feedback:
         response = client.query_points(
             collection_name=COLLECTION_NAME,
             query=vector,
             query_filter=Filter(
-                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+                must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))],
+                must_not=[FieldCondition(key="rag_quarantined", match=MatchValue(value=True))],
             ),
             limit=top_k,
+            score_threshold=RAG_MIN_SCORE,
         )
         results = response.points
         feedback["命中数"] = len(results)
-        context = "\n\n---\n\n".join(r.payload["text"] for r in results)
+        snippets = []
+        remaining = RAG_MAX_CONTEXT_CHARS
+        for result in results:
+            payload = result.payload or {}
+            if not result.score >= RAG_MIN_SCORE or payload.get("rag_quarantined") is True:
+                continue
+            text = payload.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            separator_chars = len(_CONTEXT_SEPARATOR) if snippets else 0
+            budget = min(RAG_MAX_DOCUMENT_CHARS, remaining - separator_chars)
+            if budget <= 0:
+                break
+            snippet = text.strip()[:budget]
+            snippets.append(snippet)
+            remaining -= len(snippet) + separator_chars
+        context = _CONTEXT_SEPARATOR.join(snippets)
+        feedback["注入条数"] = len(snippets)
         feedback["知识字符数"] = len(context)
         return context
