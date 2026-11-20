@@ -60,7 +60,7 @@ def test_graph_logs_actions_and_results_with_same_request_id(caplog):
         "jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value="private-knowledge"
     ), patch("jarvis.agent.nodes.plan_and_call.llm.chat", side_effect=[
         AIMessage(content="private-answer"), AIMessage(content="0.95")
-    ]), patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"):
+    ]), patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"):
         with request_trace("test"):
             graph.invoke(state)
     for node in ("memory_load", "agent_dispatch", "rag_retrieve", "plan_and_call", "reflect", "memory_write"):
@@ -143,16 +143,17 @@ def test_knowledge_query_and_upsert_log_real_counts(caplog):
         assert value not in caplog.text
 
 
-def test_partial_persistence_and_degraded_node_are_not_reported_as_success(caplog):
+def test_failed_turn_persistence_is_degraded_with_no_rows_saved(caplog):
     from jarvis.agent.nodes.memory_write import memory_write
-    state = {"user_id": "u", "messages": [HumanMessage(content="hi"), AIMessage(content="hello")]}
+    state = {"user_id": "u", "query": "hi", "final_answer": "hello",
+             "messages": [HumanMessage(content="hi"), AIMessage(content="hello")]}
     with caplog.at_level(logging.INFO), request_trace("test"), patch(
-        "jarvis.agent.nodes.memory_write.conv_mem.save_message", side_effect=[None, RuntimeError("private-error")]
+        "jarvis.agent.nodes.memory_write.conv_mem.save_turn", side_effect=RuntimeError("private-error")
     ):
         memory_write(state)
     last = next(record.getMessage() for record in reversed(caplog.records)
                 if "【节点:memory_write】" in record.getMessage())
-    assert "【状态:降级】" in last and "【历史落库数:1】" in last
+    assert "【状态:降级】" in last and "【历史落库数:0】" in last
     assert "【降级节点数:1】" in caplog.records[-1].getMessage()
     assert "private-error" not in caplog.text
 
@@ -177,8 +178,8 @@ def test_graph_traces_tool_loop_and_reflection_retry(branch, caplog):
     ), patch("jarvis.agent.nodes.agent_dispatch.load_agents", return_value=[]), patch(
         "jarvis.agent.nodes.rag_retrieve.know_mem.retrieve_knowledge", return_value=""
     ), patch("jarvis.agent.nodes.plan_and_call.llm.chat", side_effect=responses), patch(
-        "jarvis.agent.nodes.memory_write.conv_mem.save_message"
-    ), patch("jarvis.memory.knowledge.store_web_knowledge", return_value=True) as store, patch(
+        "jarvis.agent.nodes.memory_write.conv_mem.save_turn"
+    ) as save_turn, patch("jarvis.memory.knowledge.store_web_knowledge", return_value=True) as store, patch(
         "jarvis.memory.knowledge.existing_web_knowledge", side_effect=lambda *args: ExistingWebKnowledge()
     ), patch(
         "jarvis.agent.nodes.tool_execute.get_tool_registration", return_value=registration
@@ -191,6 +192,7 @@ def test_graph_traces_tool_loop_and_reflection_retry(branch, caplog):
     else:
         assert "【评分:0.20】" in caplog.text and "【状态:重试】" in caplog.text
         assert "【轮次:2】" in caplog.text
+        save_turn.assert_called_once_with("private-user", "private-question", "final")
     assert "【节点执行次数:8】" in caplog.text
     assert len(set(re.findall(r"【请求ID:([^】]+)】", caplog.text))) == 1
     assert "private-search" not in caplog.text and "private-answer" not in caplog.text

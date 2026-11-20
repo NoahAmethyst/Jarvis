@@ -137,8 +137,8 @@ def test_grpc_generate_runs_tool_chain_without_conversation_memory():
     with patch("jarvis.api.grpc.servicer.graph.invoke") as graph_invoke, patch(
         "jarvis.api.grpc.servicer.conv_mem.load_history"
     ) as load_history, patch(
-        "jarvis.api.grpc.servicer.conv_mem.save_message"
-    ) as save_message, patch(
+        "jarvis.api.grpc.servicer.conv_mem.save_turn"
+    ) as save_turn, patch(
         "jarvis.api.grpc.servicer.rag_retrieve",
         return_value={"rag_context": ""},
     ) as rag, patch(
@@ -179,7 +179,7 @@ def test_grpc_generate_runs_tool_chain_without_conversation_memory():
     assert context.code is None
     graph_invoke.assert_not_called()
     load_history.assert_not_called()
-    save_message.assert_not_called()
+    save_turn.assert_not_called()
     rag.assert_called_once()
     assert plan.call_count == 2
     execute.assert_called_once()
@@ -236,15 +236,15 @@ def test_grpc_generate_uses_rag_by_default_without_conversation_memory():
     ) as plan, patch(
         "jarvis.api.grpc.servicer.conv_mem.load_history"
     ) as load_history, patch(
-        "jarvis.api.grpc.servicer.conv_mem.save_message"
-    ) as save_message:
+        "jarvis.api.grpc.servicer.conv_mem.save_turn"
+    ) as save_turn:
         response = JarvisServicer().Generate(request, context)
 
     assert response.text == "Policy summary"
     assert context.code is None
     rag.assert_called_once()
     load_history.assert_not_called()
-    save_message.assert_not_called()
+    save_turn.assert_not_called()
     state = plan.call_args.args[0]
     assert state["rag_context"] == "retrieved policy"
 

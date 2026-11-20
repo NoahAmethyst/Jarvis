@@ -37,7 +37,7 @@ def source(url, text):
 
 
 def state(sources, name="web_search", user="u1", status="success"):
-    return {"user_id": user, "query": "May rainfall", "messages": [
+    return {"user_id": user, "query": "May rainfall", "final_answer": "Final response", "messages": [
         HumanMessage(content="May rainfall"),
         ToolMessage(content="Tool output is not the source of truth", name=name,
                     tool_call_id="c1", artifact={"sources": sources}, status=status),
@@ -68,7 +68,7 @@ def test_web_results_reviewed_per_source_before_embedding(local_knowledge, caplo
         {"id": 1, "decision": "accept", "excerpt": REPORT_2},
         {"id": 2, "decision": "irrelevant"},
         {"id": 3, "decision": "low_quality"},
-    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"), caplog.at_level(logging.INFO):
+    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"), caplog.at_level(logging.INFO):
         memory_write(state(results))
 
     review.assert_called_once()
@@ -96,11 +96,11 @@ def test_review_uncertainty_never_writes_unreviewed_data(local_knowledge, output
     client, embeddings = local_knowledge
     response = {"side_effect": output} if isinstance(output, Exception) else {"return_value": output}
     with patch("jarvis.llm.llm.chat", **response), patch(
-        "jarvis.agent.nodes.memory_write.conv_mem.save_message"
+        "jarvis.agent.nodes.memory_write.conv_mem.save_turn"
     ) as conversation:
         assert memory_write(state([source("https://city.example/report", REPORT)])) == {}
 
-    assert conversation.call_count == 2
+    conversation.assert_called_once_with("u1", "May rainfall", "Final response")
     assert rows(client) == []
     embeddings.embed_query.assert_not_called()
 
@@ -115,7 +115,7 @@ def test_repeat_writes_keep_modern_and_legacy_quarantine_and_user_scope(local_kn
     })])
     with patch("jarvis.llm.llm.chat", return_value=reviewed([
         {"id": 0, "decision": "accept", "excerpt": REPORT},
-    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"):
+    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"):
         memory_write(state([source(url, REPORT)]))
         points, _ = client.scroll(knowledge.COLLECTION_NAME)
         client.set_payload(knowledge.COLLECTION_NAME, {"rag_quarantined": True}, points=[p.id for p in points])
@@ -152,7 +152,7 @@ def test_copied_parts_of_legacy_quarantine_do_not_return_through_mirrors(local_k
     mirror = "May monitoring. " + extraction + " Additional site content."
     with patch("jarvis.llm.llm.chat", return_value=reviewed([
         {"id": 0, "decision": "accept", "excerpt": extraction},
-    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"):
+    ])) as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"):
         memory_write(state([source("https://mirror.example/may", mirror)]))
 
     review.assert_called_once()
@@ -164,7 +164,7 @@ def test_duplicate_evidence_across_requests_is_not_embedded_twice(local_knowledg
     client, embeddings = local_knowledge
     with patch("jarvis.llm.llm.chat", return_value=reviewed([
         {"id": 0, "decision": "accept", "excerpt": REPORT},
-    ])), patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"):
+    ])), patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"):
         memory_write(state([source("https://city.example/report", REPORT)]))
         # Different URL and raw page but the reviewed excerpt is already stored.
         memory_write(state([source("https://mirror.example/report", REPORT + "\n" + POOR)]))
@@ -185,7 +185,7 @@ def test_concurrent_mirrors_in_same_worker_store_one_excerpt(local_knowledge):
         return memory_write(state([source(url, REPORT)]))
 
     with patch("jarvis.llm.llm.chat", side_effect=review), patch(
-        "jarvis.agent.nodes.memory_write.conv_mem.save_message"
+        "jarvis.agent.nodes.memory_write.conv_mem.save_turn"
     ), ThreadPoolExecutor(max_workers=2) as executor:
         assert list(executor.map(write, ["https://city.example/report", "https://mirror.example/report"])) == [{}, {}]
 
@@ -196,7 +196,7 @@ def test_concurrent_mirrors_in_same_worker_store_one_excerpt(local_knowledge):
 @pytest.mark.parametrize("name,status", [("other_tool", "success"), ("web_search", "error")])
 def test_only_successful_web_tools_create_candidates(local_knowledge, name, status):
     client, embeddings = local_knowledge
-    with patch("jarvis.llm.llm.chat") as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"):
+    with patch("jarvis.llm.llm.chat") as review, patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"):
         memory_write(state([source("https://city.example/report", REPORT)], name=name, status=status))
 
     review.assert_not_called()

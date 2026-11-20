@@ -1,5 +1,4 @@
 import logging
-from langchain_core.messages import HumanMessage, AIMessage
 from jarvis.agent.query_context import retrieval_query
 from jarvis.agent.state import AgentState
 from jarvis.logging_config import format_log_tags
@@ -13,20 +12,20 @@ logger = logging.getLogger(__name__)
 @traced_node("memory_write")
 def memory_write(state: AgentState) -> dict:
     user_id = state["user_id"]
+    question = state.get("query", "")
+    final_answer = state.get("final_answer")
     saved = 0
     stats = IngestionStats()
 
     try:
         with action_trace("对话落库", 组件="PostgreSQL") as feedback:
             feedback["写入数"] = 0
-            for msg in state["messages"]:
-                if isinstance(msg, HumanMessage):
-                    conv_mem.save_message(user_id, "human", msg.content)
-                    saved += 1
-                elif isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
-                    conv_mem.save_message(user_id, "ai", msg.content)
-                    saved += 1
+            if question.strip() and isinstance(final_answer, str) and final_answer.strip():
+                conv_mem.save_turn(user_id, question, final_answer)
+                saved = 2
                 feedback["写入数"] = saved
+            else:
+                feedback.update(状态="跳过", 原因="缺少完整问答")
     except Exception as error:
         node_feedback(状态="降级")
         logger.warning(
@@ -41,7 +40,7 @@ def memory_write(state: AgentState) -> dict:
 
     try:
         ingest_web_knowledge(
-            state["messages"], retrieval_query(state.get("query", ""), user_id),
+            state["messages"], retrieval_query(question, user_id),
             user_id, state.get("reflect_llm_override"), stats,
         )
     except Exception as error:

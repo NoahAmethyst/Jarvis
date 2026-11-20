@@ -15,6 +15,7 @@ def memory_load(state: AgentState) -> dict:
         return {"history": []}
     try:
         history = conv_mem.load_history(state["user_id"])
+        node_feedback(完整轮数=len(history) // 2)
         return {"history": history}
     except Exception as error:
         node_feedback(状态="降级")

@@ -22,7 +22,7 @@ def _make_graph_with_mocks():
                 AIMessage(content="0.9"),
             ],
         ),
-        patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"),
+        patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"),
         patch("jarvis.memory.knowledge.store_web_knowledge"),
     ]
     return patches
@@ -72,7 +72,7 @@ def test_graph_retries_on_low_score():
                 AIMessage(content="0.95"),
             ],
         ),
-        patch("jarvis.agent.nodes.memory_write.conv_mem.save_message"),
+        patch("jarvis.agent.nodes.memory_write.conv_mem.save_turn"),
         patch("jarvis.memory.knowledge.store_web_knowledge"),
     ]
     for p in patches:
@@ -166,7 +166,7 @@ def test_graph_falls_back_after_tool_credential_failure(
             ),
         ),
         patch(
-            "jarvis.agent.nodes.memory_write.conv_mem.save_message"
+            "jarvis.agent.nodes.memory_write.conv_mem.save_turn"
         ),
         patch(
             "jarvis.memory.knowledge.store_web_knowledge"
